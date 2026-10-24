@@ -43,6 +43,22 @@ Console sends its own mix when it starts. Close it, then choose **Settings › Y
 
 </Faq>
 
+<Faq question="Clicks, pops or stuttering video">
+
+Sound needs the computer's attention every few milliseconds, and a click is a moment it didn't get it. If videos stutter too, the whole computer is being held up, not just the Volt. Try these in order:
+
+1. **Plug the Volt straight into the computer**, into a port at the back, not through a hub or KVM switch.
+2. **Keep Universal Audio's driver.** On Windows it's the Volt's ASIO driver: choose it in your recording app. Stand-ins like ASIO4ALL click more, not less.
+3. **Use 48 kHz everywhere.** Set the same rate in your recording app and in Windows (**Settings › System › Sound**, the Volt's output, **Format**). 24-bit is plenty; bit depth doesn't cause clicks.
+4. **Raise the buffer size** in your recording app: 128 samples to record, 256 or 512 to mix. Listen through the Volt's own mixer while you record, so a bigger buffer doesn't delay what you hear.
+5. **Free up the processor.** If Task Manager shows it near 100%, pause the busy app, or lower it: **Details**, right-click it, **Set priority › Below normal**.
+6. **Update the network driver** from your computer or motherboard maker. An old one is a common cause, even for sound. In **Device Manager**, under the network adapter's **Advanced** settings, turn off **Energy Efficient Ethernet**.
+7. **Turn off USB power saving:** in the power plan's advanced settings, set **USB selective suspend** to **Disabled**.
+
+Still clicking? The free [LatencyMon](https://www.resplendence.com/latencymon) names the driver that's holding the computer up.
+
+</Faq>
+
 <Faq question="The desktop app vanished when I closed it">
 
 It's still running in the tray, with **Close to tray** on. On Windows, turn its icon on in **Settings › Personalisation › Taskbar › Other system tray icons** to keep it in view. On GNOME, install the AppIndicator extension.
