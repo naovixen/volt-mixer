@@ -22,18 +22,8 @@ export interface ITrayRow {
     tone: ToneName;
 }
 
-/* The outputs are always in the tray; only channels can be left out. */
+/* The outputs are always in the tray; only channels can be left out. Monitor above Headphones, as on the page. */
 const outputRows = (state: IMixerState): ITrayRow[] => [
-    {
-        key: "headphone",
-        kind: "headphone",
-        name: "Headphones",
-        icon: "headphones",
-        ids: [],
-        level: state.headphone.level,
-        isMuted: state.headphone.isMuted,
-        tone: "off",
-    },
     {
         key: "monitor",
         kind: "monitor",
@@ -44,13 +34,23 @@ const outputRows = (state: IMixerState): ITrayRow[] => [
         isMuted: state.monitor.isMuted,
         tone: "off",
     },
+    {
+        key: "headphone",
+        kind: "headphone",
+        name: "Headphones",
+        icon: "headphones",
+        ids: [],
+        level: state.headphone.level,
+        isMuted: state.headphone.isMuted,
+        tone: "off",
+    },
 ];
 
 /** A linked pair shows while either side is wanted, so linking never hides a channel. */
 export const isShownInTray = (ids: readonly ChannelId[], hidden: string[]): boolean =>
     ids.some((id) => !hidden.includes(id));
 
-/** Headphones, Monitor, then the strips shown on the page that the viewer hasn't left out. */
+/** Monitor, Headphones, then the strips shown on the page that the viewer hasn't left out. */
 export const trayRows = (state: IMixerState, view: IStripView, hidden: string[]): ITrayRow[] => [
     ...outputRows(state),
     ...stripGroups(state, view)

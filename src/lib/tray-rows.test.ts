@@ -13,8 +13,8 @@ const linkedState = () => {
 describe("Using trayRows, when no channel has been left out", () => {
     test("then it should list the outputs first, then every strip on the page", () => {
         expect(trayRows(linkedState(), view, []).map((row) => row.name)).toEqual([
-            "Headphones",
             "Monitor",
+            "Headphones",
             "Input 1",
             "Input 2",
             "Line 3/4",
@@ -26,7 +26,7 @@ describe("Using trayRows, when no channel has been left out", () => {
 describe("Using trayRows, when every channel has been left out", () => {
     test("then it should still show the outputs", () => {
         const hidden = ["in1", "in2", "in3", "in4", "loopbackL", "loopbackR"];
-        expect(trayRows(linkedState(), view, hidden).map((row) => row.kind)).toEqual(["headphone", "monitor"]);
+        expect(trayRows(linkedState(), view, hidden).map((row) => row.kind)).toEqual(["monitor", "headphone"]);
     });
 });
 
