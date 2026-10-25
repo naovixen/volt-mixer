@@ -9,9 +9,19 @@ const withNewer = (newer: Partial<ISpec>): IProtocol => ({
 });
 const lackingTone = withNewer({ commands: commandsWithoutTone as ISpec["commands"] });
 
-describe.each(Object.keys(protocol.firmware))("Using missingFromSpec on the recorded firmware %s", (version) => {
-    test("then it should find nothing the page sends missing", () => {
-        expect(missingFromSpec(protocol.firmware[version] as ISpec)).toEqual([]);
+describe.each(Object.keys(protocol.firmware))("Using the recorded firmware %s", (version) => {
+    test("then it should resolve to a spec with nothing the page sends missing", () => {
+        expect(missingFromSpec(specFor(version).spec)).toEqual([]);
+    });
+});
+
+describe("Using specFor, when a firmware aliases another with sameAs", () => {
+    test("then it should resolve to that firmware's spec", () => {
+        expect(specFor("1.0.5").spec).toBe(specFor("1.0.3").spec);
+    });
+
+    test("then it should count as an exact match, so the page trusts it", () => {
+        expect(specFor("1.0.5").isExact).toBe(true);
     });
 });
 

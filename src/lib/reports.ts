@@ -65,7 +65,8 @@ const muteWordReport = (spec: ISpec, data: Uint8Array): DeviceReport => {
     if (field === spec.muteWordFields.direct) return { type: "direct", mask: value("direct") };
     if (field === spec.muteWordFields.monitorMute) return { type: "monitorMute", isMuted: value("monitorMute") === 1 };
     if (field === spec.muteWordFields.monitorLevel) {
-        return { type: "monitorLevel", level: value("monitorLevel") / spec.monitorLevelPerUnit };
+        const raw = u16(data, 1 + spec.muteWordOffsets.monitorLevel);
+        return { type: "monitorLevel", level: raw / spec.monitorLevelPerUnit };
     }
     return { type: "unknown", cmd: byte(data, 0) };
 };
@@ -129,7 +130,7 @@ export const parseState = (spec: ISpec, data: Uint8Array): IHardwareState => {
         directMask: at(layout.directMask),
         monitor: {
             isMuted: at(layout.monitorMute) === 1,
-            level: at(layout.monitorLevel) / spec.monitorLevelPerUnit,
+            level: word(layout.monitorLevel) / spec.monitorLevelPerUnit,
             isMono: at(layout.monitorMono) === 1,
         },
         preampGain: [gain(0), gain(1)],

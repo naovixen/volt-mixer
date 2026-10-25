@@ -86,6 +86,11 @@ export interface ISpec {
     digitalFormat: string[];
 }
 
+/** A firmware that shares another's spec, verified byte-identical (see docs/maintaining.md). */
+export interface IFirmwareAlias {
+    sameAs: string;
+}
+
 export interface IProtocol {
     device: string;
     vendorId: number;
@@ -94,7 +99,8 @@ export interface IProtocol {
     controlUsagePage: number;
     /** Every Volt's name by decimal USB product ID, so an unsupported one can be named. */
     models: Record<string, string>;
-    firmware: Record<string, ISpec>;
+    /** A firmware is its own spec, or an alias to the version it was verified identical to. */
+    firmware: Record<string, ISpec | IFirmwareAlias>;
 }
 
 /** The model name for a UA USB product ID ("Volt 2 Max"), or a generic name. */
@@ -199,18 +205,29 @@ const missingFrom = (shape: Shape<unknown> | Check, value: unknown, path: string
 /** What a firmware's spec lacks of what the page needs ("commands.tone", …); empty when it's complete. */
 export const missingFromSpec = (spec: ISpec): string[] => missingFrom(specShape as Shape<unknown>, spec, "");
 
+/** The spec a firmware entry resolves to, following a `sameAs` alias; undefined if it dead-ends. */
+const resolveSpec = (source: IProtocol, version: string, seen: Set<string> = new Set()): ISpec | undefined => {
+    const entry = source.firmware[version];
+    if (entry === undefined || seen.has(version)) return undefined;
+    if ("sameAs" in entry) return resolveSpec(source, entry.sameAs, seen.add(version));
+    return entry;
+};
+
 /**
  * The spec for a firmware version, or the newest known one when the version isn't recorded. A
  * spec missing anything the page sends is never chosen, so no command goes out with a guessed byte.
+ * An alias (`sameAs`) resolves to the spec it was verified identical to and counts as an exact match.
  */
 export const specFor = (version: string, source: IProtocol = protocol): ISpecChoice => {
-    const complete = Object.keys(source.firmware)
-        .filter((known) => missingFromSpec(source.firmware[known] as ISpec).length === 0)
-        .sort(compareVersions);
+    const isComplete = (known: string): boolean => {
+        const spec = resolveSpec(source, known);
+        return spec !== undefined && missingFromSpec(spec).length === 0;
+    };
+    const complete = Object.keys(source.firmware).filter(isComplete).sort(compareVersions);
     const isExact = complete.includes(version);
     const chosen = isExact ? version : complete.at(-1);
     if (chosen === undefined) throw new Error("No firmware in the protocol data is complete (see missingFromSpec).");
-    return { version: chosen, isExact, spec: source.firmware[chosen] as ISpec };
+    return { version: chosen, isExact, spec: resolveSpec(source, chosen)! };
 };
 
 export const newestSpec = (): ISpec => specFor("").spec;

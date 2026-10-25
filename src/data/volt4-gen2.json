@@ -110,7 +110,7 @@
                 "monitorMute": 2,
                 "monitorLevel": 4
             },
-            "monitorLevelMax": 200,
+            "monitorLevelMax": 1000,
             "stateLayout": {
                 "_note": "byte offsets after the 'F0 11' header; from tools/state-probe.mjs (reference/decoded/1.0.3-state)",
                 "phantomMask": 1,
@@ -132,14 +132,19 @@
                 "hostFlag": 16,
                 "_note": "host sends F0 12 02 (0x10|mask); device reports F0 12 02 mask. bit0 = pair 1-2, bit1 = pair 3-4"
             },
-            "monitorLevelPerUnit": 2,
+            "monitorLevelPerUnit": 10,
             "headphoneLevelMax": 1000,
-            "_scales": "Monitor and headphone levels are shown on Console's 0-100 scale: monitor raw = 2 x level (max 200), headphone raw = 10 x level (max 1000).",
+            "_scales": "Monitor and headphone are the same output-volume control on Console's 0-100 scale, each a u16: monitor raw = 10 x level (max 1000), headphone raw = 10 x level (max 1000).",
             "autoGainSeconds": {
                 "min": 5,
                 "max": 90,
                 "default": 10
             }
+        },
+        "1.0.5": {
+            "_note": "Firmware 1.0.5 reports version \"1.0.5\" over HID. Verified byte-identical to 1.0.3, so it shares that spec via sameAs (see docs/maintaining.md 'Protocol data').",
+            "sameAs": "1.0.3",
+            "verifiedFrom": "reference/decoded: 1.0.5.0 (sweep, 2128 reports round-trip identical), 1.0.5.0-manual; state dump identical (72 bytes); HID descriptor in74/out39 unchanged; UA manuals unchanged. Captured 2026-10-25 on firmware 1.0.5.0."
         }
     },
     "models": {

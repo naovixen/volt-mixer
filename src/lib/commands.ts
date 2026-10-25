@@ -73,13 +73,19 @@ export const phantomMask = (spec: ISpec, mask: number): IReport => command(spec,
 
 /**
  * One field of the mute word ("direct", "monitorMute", "monitorLevel"); the last byte names the field.
- * Monitor level is clamped at 0: turning below 0 on the hardware makes it jump loud.
+ * Monitor level is a u16 (like the headphone level), clamped at 0: turning below 0 on the hardware
+ * makes it jump loud.
  */
 export const muteWord = (spec: ISpec, field: MuteField, value: number | boolean): IReport => {
     const payload = [0, 0, 0, 0, 0, 0, spec.muteWordFields[field]];
-    let raw = typeof value === "boolean" ? Number(value) : value;
-    if (field === "monitorLevel") raw = clamp(Math.round(raw), 0, spec.monitorLevelMax);
-    payload[spec.muteWordOffsets[field]] = raw & 0xff;
+    const offset = spec.muteWordOffsets[field];
+    if (field === "monitorLevel") {
+        const raw = clamp(Math.round(value as number), 0, spec.monitorLevelMax);
+        payload[offset] = raw & 0xff;
+        payload[offset + 1] = (raw >> 8) & 0xff;
+    } else {
+        payload[offset] = (typeof value === "boolean" ? Number(value) : value) & 0xff;
+    }
     return command(spec, cmd(spec, "muteWord"), payload);
 };
 

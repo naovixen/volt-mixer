@@ -1,0 +1,62 @@
+{
+ "taken": "2026-10-25T18:36:27.210Z",
+ "snapshot": {
+  "apps": {
+   "UA Connect 1.11.0": "1.11.0",
+   "Universal Audio Volt Driver v6.16.0": "6.16.0"
+  },
+  "files": {
+   "UAD Console.exe": "1.3.2.1173",
+   "UAMixerHelper.exe": "1.3.2.1173",
+   "UniversalAudioUsbAudio.sys": "6.16.0.0"
+  },
+  "hid": [
+   {
+    "usagePage": "0xFF01",
+    "usage": "0x0000",
+    "inputReportBytes": 74,
+    "outputReportBytes": 39,
+    "featureReportBytes": 0,
+    "linkCollections": 13,
+    "inputValueCaps": 4,
+    "outputValueCaps": 8
+   }
+  ],
+  "api": {
+   "firmware": "1.0.5.0",
+   "deviceType": "volt_4_gen2",
+   "pluginSdk": "5.4.9",
+   "buses": [
+    "ADAT 1",
+    "ADAT 1-2",
+    "ADAT 2",
+    "ADAT 3",
+    "ADAT 3-4",
+    "ADAT 4",
+    "ADAT 5",
+    "ADAT 5-6",
+    "ADAT 6",
+    "ADAT 7",
+    "ADAT 7-8",
+    "ADAT 8",
+    "ANALOG 1",
+    "ANALOG 1-2",
+    "ANALOG 2",
+    "ANALOG 3",
+    "ANALOG 3-4",
+    "ANALOG 4",
+    "CUE 1",
+    "CUE 2",
+    "HEADPHONE",
+    "LOOPBACK",
+    "LOOPBACK L",
+    "LOOPBACK R",
+    "MONITOR",
+    "S/PDIF",
+    "S/PDIF L",
+    "S/PDIF R",
+    "TALKBACK"
+   ]
+  }
+ }
+}

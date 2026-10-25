@@ -246,3 +246,27 @@ mix › QR code, any browser) and the phone remote (Settings › Desktop app ›
 only, because only the app can listen for a phone). Each points to the other, and neither QR code
 is shown in a second place. The phone remote also offers "Keep this mix on my phone", which opens
 the mix link on the website (the remote's own origin can't keep it), so app users need one scan.
+
+## Monitor level is a u16, the same control as the headphone level
+
+Monitor and headphone outputs are the same kind of control: Console shows each 0–100, and on the
+wire each is a little-endian **u16**, raw = 10 × level, full scale 1000 (Console 100). The page
+originally encoded the monitor level as a single byte, raw = 2 × level, max 200 — so its slider
+reached only a fifth of the real volume, and it misread a monitor level Console had set high. The
+mistake survived into firmware 1.0.5 because every capture until then only moved the monitor level
+about 20 % of the way, so its high byte and true maximum were never seen; it was caught (and fixed,
+`monitorLevelPerUnit` 10, `monitorLevelMax` 1000, u16 in `muteWord` and both parsers) only when a
+capture finally drove the knob to the top. Saved mixes don't carry output levels, so the fix can't
+make an old mix play louder; the below-0 clamp (the Volt jumps loud below 0) stays. The maintenance
+flow now drives every continuous control to its limit and checks each scaled maximum against the
+device, so an under-scaled control can't hide again (`docs/maintaining.md`).
+
+## A firmware verified identical aliases another, rather than duplicating it
+
+`src/data/volt4-gen2.json` is keyed by the version the Volt reports over HID identify, and the page
+only sends to a firmware whose key it holds exactly. A minor firmware revision is often byte-identical
+to the one before. Rather than copy a spec under the new key (130 lines to keep in step) or leave the
+page read-only on a firmware we've checked, a verified-identical firmware is an alias —
+`"1.0.5": { "sameAs": "1.0.3", "verifiedFrom": "…" }` — which `specFor` resolves to the named spec and
+counts as an exact match. The data stays lean and honest about which firmwares were checked and how; a
+firmware that genuinely differs gets its own full spec instead.

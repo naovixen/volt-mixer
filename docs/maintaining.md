@@ -25,19 +25,23 @@ node fetch-docs.js         # re-downloads the manuals; prints CHANGED if UA edit
     - runs `capture-run.js` as you, which saves a full snapshot to `captures/snapshot-before-run.json`, mutes MONITOR and HEADPHONE for the whole run, and steps every setting through the API with timestamps (output levels only ever down, never below 0),
     - restores the snapshot at the end (also after an error or Ctrl+C), compares every setting, and exits 1 with a list if anything differs.
       If anything is left wrong: `node ua.js restore`.
-5. `node ua.js diff ../captures/snapshot-before.json` compares your own before snapshot with the Volt now. It should say `identical`.
+5. `node ua.js diff ../captures/snapshot-before.json` compares your own before snapshot with the Volt now. It should say `identical`. A couple of settings sometimes drift (UA Console re-pushing its stored state as it settles after launch, which the run's own restore doesn't catch because it snapshots after that); if so, `node ua.js restore ../captures/snapshot-before.json` and diff again.
 6. Hardware-only controls (knob, buttons, display menu): `powershell -File run-capture.ps1 -Mode manual`, do the actions in the order listed in `PROTOCOL.md`, then press Enter.
 7. Decode:
     ```bash
-    node decode-capture.js ../captures/volt-<stamp>-hub1.pcap ../captures/run-log.jsonl
+    node decode-capture.js ../captures/volt-<stamp>-hub1.pcap ../captures/run-log.jsonl --out ../reference/decoded/<version>
     ```
-    This writes `reference/decoded/<firmware>/{steps,packets}.json` and `summary.md`: per parameter, which payload bytes change.
-8. Compare with the previous firmware's folder in `reference/decoded/`. Usually only a few parameters move.
-9. Add the new firmware to `src/data/volt4-gen2.json` (see "Protocol data" below), add the new decoded folder to the capture tests in `src/lib/commands.test.ts`, run `pnpm test`, and try the page on the home PC with Console closed.
+    This writes `reference/decoded/<version>/{steps,packets}.json` and `summary.md`: per parameter, which payload bytes change. **Mind the version string:** the page matches the firmware the Volt reports over **HID identify** (e.g. `1.0.5`), which is the key in `src/data`. The run-log's `firmware` field comes from UA's API, which can lag (reporting the old version straight after a flash) or use a four-part string (`1.0.5.0`); without `--out` the decode names the folder from that and could overwrite another firmware's reference. Always pass `--out ../reference/decoded/<hid-version>`. To read the HID version: `node tools/state-probe.mjs --dump` prints a warning naming it, or check what the page shows on connect.
+8. Compare with the previous firmware's folder in `reference/decoded/`. Usually only a few parameters move. Two things to check deliberately, because a capture only shows what you exercised:
+    - **Drive every continuous control to its true limit**, not partway. The manual run now drags the monitor and headphone levels fully up (muted); do the same for anything new. The monitor-level under-scale (fixed Oct 2026) was hidden for a firmware because old captures only moved it ~20% of the way, so its real maximum and u16 high byte were never seen.
+    - **Confirm each scaled maximum in the spec against the device**, not just against an old capture: `faderMaxDb`, `preampGainMaxDb` (UA's manual says 60 dB), `monitorLevelMax`/`headphoneLevelMax`. Monitor and headphone are the **same output-volume control** on Console's 0–100 scale — both a u16, raw = 10 × level, max 1000 — so they should always match; if one differs from the other, suspect a mistake.
+9. Add the new firmware to `src/data/volt4-gen2.json` (see "Protocol data" below), add the new decoded folder(s) to the capture tests in `src/lib/commands.test.ts` (`describe.each`), run `pnpm test`, and try the page on the home PC with Console closed.
 
 ## Protocol data
 
-The page keeps the protocol as data in `src/data/volt4-gen2.json`, keyed by firmware version, so a firmware change means a new data file, not code edits. If the page sees a firmware version it hasn't been checked against, it uses the newest known spec in **read-only** mode: it shows the Volt's settings but sends nothing until the user presses "Use anyway".
+The page keeps the protocol as data in `src/data/volt4-gen2.json`, keyed by the version the Volt reports over HID identify, so a firmware change means a new data entry, not code edits. If the page sees a firmware version it hasn't been checked against, it uses the newest known spec in **read-only** mode: it shows the Volt's settings but sends nothing until the user presses "Use anyway".
+
+When a new firmware is verified **byte-identical** to one already recorded (as 1.0.5 was to 1.0.3), don't duplicate the spec. Add an alias entry — `"1.0.5": { "sameAs": "1.0.3", "verifiedFrom": "…" }` — which `specFor` resolves to the named spec and treats as an exact match, so the page trusts it with no "Use anyway". Record what the capture showed in `verifiedFrom`. If a later firmware differs, give it its own full spec instead.
 
 ## Tools
 

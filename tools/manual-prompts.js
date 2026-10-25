@@ -22,16 +22,26 @@ const PROMPTS = [
     ["headphone mute (knob press)", "Press the KNOB once (mute headphones), then press it again (unmute)."],
     ["select monitor", "Press the MONITOR/HEADPHONE button again (back to green = monitors)."],
     [
-        "console monitor knob",
-        "In UAD Console: drag the MONITOR knob (right column) UP a little, then back down to 0. Never below 0.",
+        "console monitor level (full range)",
+        "In UAD Console: MUTE the monitor, drag the MONITOR level (right column) fully UP to the very top, then back down to 0, then unmute. Muted so it stays silent; this captures the whole range, not just the bottom. Never leave it above 0.",
+    ],
+    [
+        "console headphone level (full range)",
+        "In UAD Console: MUTE the headphones, drag the HEADPHONE level fully UP to the very top, then back down to 0, then unmute.",
     ],
     ["select input 1", "Press INPUT until the display shows input 1."],
-    ["tone button", "Press TONE 4 times (Warmth, Focus, Shine, back to Off)."],
+    [
+        "tone button",
+        "Press TONE 4 times: it steps through all four tone modes and lands back where it started, whatever the starting mode.",
+    ],
     ["direct button", "Press DIRECT twice (toggle and back)."],
     ["48v button", "Nothing plugged into XLR 1? Press 48V twice (on, then off). Otherwise just press Enter to skip."],
     ["gain knob", "Turn the KNOB up 2 clicks, then down 2 clicks (input 1 gain)."],
     ["select line 3", "Press INPUT until the display shows input 3."],
-    ["link 3-4 (hold input)", "Press and HOLD INPUT to link 3-4. Then press and HOLD INPUT again to unlink."],
+    [
+        "link 3-4 (hold input)",
+        "With input 3 or 4 selected, press and HOLD the INPUT button (not the knob) to toggle the 3-4 link, then press and HOLD INPUT again to toggle it back. It returns to the state it started in, linked or not.",
+    ],
     [
         "meter view",
         "Press and HOLD the KNOB for the menu, choose Meter View. Then open the menu again and choose Input View.",

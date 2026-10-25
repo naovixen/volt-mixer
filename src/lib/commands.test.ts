@@ -5,7 +5,7 @@ import { defaultState, type IMixerState } from "./mixer.ts";
 import { createMixerSync } from "./mixer-sync.ts";
 import { parseCommandReport } from "./reports.ts";
 import type { DeviceReport } from "./reports.ts";
-import { specFor } from "./spec.ts";
+import { specFor, type MuteField } from "./spec.ts";
 
 interface IStep {
     label: string;
@@ -83,9 +83,9 @@ describe("Using muteWord, when asked for a monitor level below 0", () => {
     });
 });
 
-describe("Using monitorLevel, when given Console's level 98", () => {
-    test("then it should send raw 196, the value Console's knob sent", () => {
-        expect(hexOf([commands.monitorLevel(spec, 98)])).toEqual(["f01500000000c40010f7"]);
+describe("Using monitorLevel, when given Console's full level 100", () => {
+    test("then it should send raw 1000 as a u16, reaching full monitor volume", () => {
+        expect(hexOf([commands.monitorLevel(spec, 100)])).toEqual(["f01500000000e80310f7"]);
     });
 });
 
@@ -105,16 +105,34 @@ const reencode = (report: DeviceReport): commands.IReport | null => {
     return builders[report.type]?.() ?? null;
 };
 
+/**
+ * A mute-word report names one field in its last byte and the device applies only that one, but
+ * Console fills the other fields with the current state. The page sends only the named field, so
+ * compare just that: zero the other fields' bytes before the byte-for-byte round-trip check.
+ */
+const canonicalMuteWord = (hex: string): string => {
+    const data = [...Buffer.from(hex.slice(2), "hex")];
+    if (data[0] !== spec.commands.muteWord) return hex;
+    const named = (Object.keys(spec.muteWordFields) as MuteField[]).find((f) => spec.muteWordFields[f] === data[7]);
+    if (!named) return hex;
+    for (const field of Object.keys(spec.muteWordOffsets) as MuteField[]) {
+        if (field === named) continue;
+        data[1 + spec.muteWordOffsets[field]] = 0;
+        if (field === "monitorLevel") data[1 + spec.muteWordOffsets[field] + 1] = 0; // u16 high byte
+    }
+    return "f0" + Buffer.from(data).toString("hex");
+};
+
 const roundTripFailures = (steps: IStep[]): string[] =>
     steps
         .flatMap((step) => [...step.out.map((report) => report.data), ...(step.inReports ?? [])])
         .filter((hex) => hex.startsWith("f0"))
         .filter((hex) => {
             const again = reencode(parseCommandReport(spec, Uint8Array.from(Buffer.from(hex.slice(2), "hex"))));
-            return again !== null && trimmed(commands.toHex(again)) !== trimmed(hex);
+            return again !== null && trimmed(commands.toHex(again)) !== trimmed(canonicalMuteWord(hex));
         });
 
-describe.each(["1.0.3.0", "1.0.3.0-startup", "1.0.3.0-manual"])(
+describe.each(["1.0.3.0", "1.0.3.0-startup", "1.0.3.0-manual", "1.0.5.0", "1.0.5.0-manual"])(
     "Using parseCommandReport on the %s capture",
     (name) => {
         test("then it should encode every report it decodes back to the same bytes", () => {
