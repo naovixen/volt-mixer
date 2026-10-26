@@ -8,7 +8,7 @@ directories:
   output: release
   buildResources: build
 # The site is packed in app.asar with main's code, so the asar integrity check covers it too
-# (src/site-files.ts). It includes desktop-hid.json, which main reads (src/volt-hid.ts).
+# (src/site-files.ts).
 files:
   - out/**
   - site/**

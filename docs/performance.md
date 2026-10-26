@@ -27,7 +27,9 @@ It runs these scenarios:
   meters moving. Then a 6 s fader drag, with pointer moves every 4 ms like a 240 Hz mouse. Then the
   window minimised, then shown again.
 - **desktop:** the app from source with a temporary `--user-data-dir`. It runs with the window open
-  (idle, then the drag), and started in the tray (`--hidden`).
+  (idle, then the drag), and started in the tray (`--hidden`). Since phase 3 the pretend Volt is in
+  the app's main process (`desktop/src/hid-backend-fake.ts`, only when `VOLT_FAKE_VOLT=bench` and
+  run from source), and the bench stops the app unless main says it's using it.
 - **installed:** the installed app as it's running now, sampled for 30 s. It is only read.
 
 The bench records these columns:
@@ -72,11 +74,12 @@ What these show:
 The same scenarios. CPU in headless runs moves by about a percent of the machine from run to
 run, so the page's own work and the writes are the steadier columns.
 
-| phase                              | web idle: page ms/s, recalcs/s | web drag: page ms/s, layouts/s, HID writes/s | app idle: page ms/s | app drag: CPU % one core, HID writes/s | app in tray: processes, private set MB, private bytes MB |
-| ---------------------------------- | ------------------------------ | -------------------------------------------- | ------------------- | -------------------------------------- | -------------------------------------------------------- |
-| baseline                           | 51.0, 52.5                     | 300.3, 137.2, 275.5                          | 57.0                | 88.3, 254.2                            | 5, 117, 245                                              |
-| 1: engine, send pump, meter frames | 43.9, 39.3                     | 253.4, 130.2, 70.1                           | 32.3                | 49.1, 70.2                             | 5, 115, 236                                              |
-| 2: views draw only what changed    | 26.5, 33.0                     | 226.3, 118.5, 70.2                           | 30.7                | 50.4, 70.6                             | 5, 112, 234                                              |
+| phase                               | web idle: page ms/s, recalcs/s | web drag: page ms/s, layouts/s, HID writes/s | app idle: page ms/s | app drag: CPU % one core, HID writes/s | app in tray: processes, private set MB, private bytes MB |
+| ----------------------------------- | ------------------------------ | -------------------------------------------- | ------------------- | -------------------------------------- | -------------------------------------------------------- |
+| baseline                            | 51.0, 52.5                     | 300.3, 137.2, 275.5                          | 57.0                | 88.3, 254.2                            | 5, 117, 245                                              |
+| 1: engine, send pump, meter frames  | 43.9, 39.3                     | 253.4, 130.2, 70.1                           | 32.3                | 49.1, 70.2                             | 5, 115, 236                                              |
+| 2: views draw only what changed     | 26.5, 33.0                     | 226.3, 118.5, 70.2                           | 30.7                | 50.4, 70.6                             | 5, 112, 234                                              |
+| 3: engine in the app's main process | 26.8, 33.6                     | 240.0, 125.5, 70.6                           | 18.0                | 58.3, 48.0                             | 4, 62, 130                                               |
 
 What's left in a drag is the browser drawing a frame for every screen refresh while the handle
 moves, which it should. A trace of a 3 s drag at 240 Hz shows only three style changes a frame

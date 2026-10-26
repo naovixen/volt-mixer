@@ -13,11 +13,11 @@ import type { LinkReceiver } from "./mix-address.ts";
  * box red until it's edited); kept for later, it says so under the box. Replacing a mix this
  * computer has asks first.
  */
-const usePastedLink = (form: HTMLFormElement, receive: LinkReceiver): void => {
+const usePastedLink = async (form: HTMLFormElement, receive: LinkReceiver): Promise<void> => {
     const input = form.querySelector<HTMLInputElement>("[data-mix-link-input]")!;
     const question = "Replace this computer's mix with the one in the link?";
     if (snap().state.isMixOwned && !window.confirm(question)) return;
-    const { kind, text } = receive(input.value);
+    const { kind, text } = await receive(input.value);
     const isError = kind === "error";
     setInvalid(input, isError);
     if (!isError) input.value = "";
@@ -38,7 +38,7 @@ export const wireMixPasteForms = (receive: LinkReceiver): void => {
     for (const form of document.querySelectorAll<HTMLFormElement>("[data-mix-paste]")) {
         form.addEventListener("submit", (event) => {
             event.preventDefault();
-            usePastedLink(form, receive);
+            void usePastedLink(form, receive);
         });
         form.addEventListener("input", () => onPasteEdited(form));
     }

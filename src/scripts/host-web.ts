@@ -1,29 +1,47 @@
 import { createVoltEngine, type IVoltEngine } from "../lib/engine/engine.ts";
-import { site } from "../lib/site.ts";
 import { holdControlLock } from "./control-lock.ts";
-import { desktopApp } from "./desktop.ts";
-import { useEngine } from "./engine-client.ts";
+import { useEngine, type IEngineClient } from "./engine-client.ts";
 import { notice } from "./notices.ts";
-import { engineStore, loadTrayHidden, loadView } from "./store.ts";
+import { engineStore, loadTrayHidden, loadView, saveTrayHidden, saveView } from "./store.ts";
 import * as volt from "./transport-webhid.ts";
 
 /*
- * The engine in this page, driving the Volt over WebHID with this browser's storage: the website,
- * and (until the engine moves to the app's main process) the desktop app's main window.
+ * The website: the engine runs in this page, driving the Volt over WebHID, with this browser's
+ * storage. Only one tab drives it (control-lock.ts).
  */
 
 /** Where a mix link points: the website, wherever this page is served from. */
-const linkBase = (): string =>
-    desktopApp() ? site.websiteUrl : new URL(import.meta.env.BASE_URL, location.origin).href;
+const linkBase = (): string => new URL(import.meta.env.BASE_URL, location.origin).href;
 
-export const startEngine = (): IVoltEngine => {
+/** The engine as the views use it, with Connect and Disconnect going to WebHID. */
+const clientOf = (engine: IVoltEngine): IEngineClient => ({
+    ...engine,
+    receiveMixLink: (link) => engine.receiveMixLink(link, location.href),
+    setView: (change) => {
+        engine.setView(change);
+        const { isDigitalShown, isLoopbackShown, trayHidden } = engine.snapshot().view;
+        saveView({ isDigitalShown, isLoopbackShown });
+        saveTrayHidden(trayHidden);
+    },
+    connect: () =>
+        void volt
+            .pair()
+            .then(
+                (result) =>
+                    result === "cancelled" &&
+                    notice('No Volt was chosen. Click Connect Volt and pick "Volt 4 Gen 2".', { kind: "info" }),
+            ),
+    disconnect: () => void volt.disconnect(),
+});
+
+export const startWebEngine = (): IVoltEngine => {
     const engine = createVoltEngine({
         transport: { send: volt.send },
         store: engineStore,
-        options: { isWebsite: desktopApp() === null, linkBase: linkBase() },
+        options: { isWebsite: true, linkBase: linkBase() },
         view: { ...loadView(), trayHidden: loadTrayHidden() },
     });
-    useEngine(engine);
+    useEngine(clientOf(engine));
     return engine;
 };
 
@@ -42,6 +60,6 @@ export const driveVolt = (engine: IVoltEngine, onDecided: () => void): void => {
     window.addEventListener("focus", engine.reread);
     document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && engine.reread());
     window.addEventListener("pagehide", engine.saveNow);
-    void holdControlLock().then(onDecided);
+    void holdControlLock(engine).then(onDecided);
     void volt.reconnect();
 };

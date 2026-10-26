@@ -1,6 +1,6 @@
 /*
- * window.voltDesktop and window.voltTray, added by the desktop app's preloads (desktop/src/preload.ts,
- * tray-preload.ts). On the website they're missing, and everything that uses them stays hidden. No
+ * window.voltDesktop and window.voltTray, added by the desktop app's preloads (desktop/src/preload.cts,
+ * tray-preload.cts). On the website they're missing, and everything that uses them stays hidden. No
  * imports, so anything can use them.
  */
 
@@ -40,7 +40,19 @@ export interface IPhoneInfo {
     phones: number;
 }
 
-/** The main window's window.voltDesktop (desktop/src/preload.ts). */
+/** The engine in the app's main process (desktop/src/engine-host.ts), as the main window reaches it. */
+export interface IVoltDesktopEngine {
+    /** Asks for everything now; then each change comes as a patch. */
+    hello: () => void;
+    sendIntent: (seq: number, intent: unknown) => void;
+    command: (name: string, ...args: unknown[]) => Promise<unknown>;
+    setMetersWanted: (isWanted: boolean) => void;
+    onPatch: (listen: (patch: unknown) => void) => void;
+    onMessage: (listen: (text: unknown, kind: unknown) => void) => void;
+    onMeters: (listen: (frame: unknown) => void) => void;
+}
+
+/** The main window's window.voltDesktop (desktop/src/preload.cts). */
 export interface IVoltDesktop {
     getState: () => Promise<IDesktopState | null>;
     setSettings: (change: Partial<IDesktopSettings>) => Promise<IDesktopState | null>;
@@ -51,26 +63,20 @@ export interface IVoltDesktop {
     rotatePhone: () => Promise<IPhoneInfo | null>;
     /** The phone remote's state, each time it changes. */
     onPhoneStatus: (listen: (info: IPhoneInfo) => void) => void;
-    publishToPhones: (snapshot: unknown) => void;
-    onPhoneCount: (listen: (count: number) => void) => void;
-    onPhoneIntent: (answer: (intent: unknown) => unknown) => void;
-    /** Before sleep or shutdown ("dim") and on waking ("undim"); see display-fade.ts. */
-    onDisplayFade: (answer: (request: unknown) => unknown) => void;
-    /** Whether this page is driving a Volt; only then does the app dim it itself at shutdown. */
-    setVoltLive: (isLive: boolean) => void;
-    /** The main window being shown or hidden (the app tells it; the page can't tell by itself). */
-    onWindowVisible: (listen: (isVisible: boolean) => void) => void;
+    engine: IVoltDesktopEngine;
 }
 
-/** The tray window's window.voltTray (desktop/src/tray-preload.ts). */
+/** The tray window's window.voltTray (desktop/src/tray-preload.cts). */
 export interface IVoltTray {
     /** The tray window's content height in CSS px; the app sizes the window to it. */
     fitTray: (height: number) => void;
     /** Hides the tray window (its Close button). */
     hideTray: () => void;
     openMainWindow: () => void;
-    /** The tray window being shown or hidden (the app tells it; the page can't tell by itself). */
-    onTrayVisible: (listen: (isVisible: boolean) => void) => void;
+    /** Asks for what the tray shows now; it then comes each time it changes, while the window is shown. */
+    hello: () => void;
+    sendIntent: (intent: unknown) => Promise<unknown>;
+    onSnapshot: (listen: (snapshot: unknown) => void) => void;
 }
 
 /** The desktop app's API in its main window; null on the website and in the tray window. */

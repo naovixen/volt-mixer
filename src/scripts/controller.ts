@@ -6,15 +6,15 @@ import { carryMixLink, startCarryPanel } from "./carry-mix.ts";
 import { followLayout, refreshChannelDialog, wireChannelDialog } from "./channel-dialog.ts";
 import { connectionActions, renderConnection } from "./connection-view.ts";
 import { initDialogs } from "./dialogs.ts";
-import { reportVoltLive, wireDisplayFade } from "./display-fade.ts";
-import { viewSpec } from "./engine-client.ts";
-import { driveVolt, startEngine } from "./host-web.ts";
+import { desktopApp } from "./desktop.ts";
+import { getEngine, viewSpec, type IEngineClient } from "./engine-client.ts";
+import { startDesktopEngine } from "./host-desktop.ts";
+import { driveVolt, startWebEngine } from "./host-web.ts";
 import { findMeters, resetMeters, showMeterLevels } from "./meters-view.ts";
 import { readMixFromAddress, receiveMixLink, takeLinksFromOtherTabs, type LinkReceiver } from "./mix-address.ts";
 import { wireMixPasteForms } from "./mix-link-form.ts";
 import { notice, showConditions } from "./notices.ts";
 import { isPageShown, onPageVisibility, wirePageVisibility } from "./page-visibility.ts";
-import { publish, wireRemote } from "./remote.ts";
 import { requestRender, setRenderer } from "./render-loop.ts";
 import { whenRefused } from "./run-intent.ts";
 import { refreshSettings, settingsActions, wireSettingsDialog } from "./settings-dialog.ts";
@@ -46,8 +46,6 @@ const keepFocus = (focused: Element | null): void => {
 const meterNames = (snapshot: IEngineSnapshot): Set<string> =>
     new Set(Object.keys(viewSpec(snapshot).reports.meters.offsets));
 
-let engine: IVoltEngine | null = null;
-
 /** The strips, rebuilt when the layout changed; their values, for the channels that changed. */
 const renderMixer = (snapshot: IEngineSnapshot, changes: IChanges): void => {
     const { topics } = changes;
@@ -74,7 +72,7 @@ const renderMixOwnership = (snapshot: IEngineSnapshot): void => {
 
 /** Draws only what changed (a frame's worth of changes, render-loop.ts). */
 const render = (changes: IChanges): void => {
-    if (!engine) return;
+    const engine = getEngine();
     const snapshot = engine.snapshot();
     const focused = document.activeElement;
     renderMixer(snapshot, changes);
@@ -91,11 +89,11 @@ const confirmThen = (question: string, run: () => void): void => {
     if (window.confirm(question)) run();
 };
 
-const pageActions = (current: IVoltEngine): Record<string, () => void> => ({
+const pageActions = (current: IEngineClient): Record<string, () => void> => ({
     ...connectionActions,
     ...outputActions,
     ...settingsActions,
-    identify: current.identify,
+    identify: () => current.identify(),
     "mix-defaults": () => confirmThen("Set every channel to 0 dB, like a new UAD Console session?", current.resetMix),
     "push-mix": () => confirmThen("Apply this computer's mix to the Volt?", current.pushMix),
     "forget-mix": () =>
@@ -105,24 +103,20 @@ const pageActions = (current: IVoltEngine): Record<string, () => void> => ({
 /** Mix links, from the address (also when it changes) or a paste box, go to `receive`. */
 const wireLinkIntake = (receive: LinkReceiver): void => {
     wireMixPasteForms(receive);
-    window.addEventListener("hashchange", () => readMixFromAddress(receive));
+    window.addEventListener("hashchange", () => void readMixFromAddress(receive));
 };
 
 /** Shown again: the views catch up, and the meters start from empty rather than old peaks. */
-const onVisibility = (current: IVoltEngine, isShown: boolean): void => {
+const onVisibility = (current: IEngineClient, isShown: boolean): void => {
     current.setMetersWanted(isShown);
     if (!isShown) return;
     resetMeters();
     requestRender();
 };
 
-/** What the engine says goes to the views, the tray and phones, and the desktop app. */
-const follow = (current: IVoltEngine): void => {
-    current.onChange((changes) => {
-        requestRender(changes);
-        publish();
-        reportVoltLive(current.snapshot().isLive);
-    });
+/** What the engine says changed is drawn; its messages go to the notice bar. */
+const follow = (current: IEngineClient): void => {
+    current.onChange(requestRender);
     current.onMessage((text, kind) => notice(text, { kind }));
     current.onMeters(showMeterLevels);
     current.setMetersWanted(isPageShown());
@@ -131,7 +125,7 @@ const follow = (current: IVoltEngine): void => {
 };
 
 /** The views every mode has; they show the state, read-only until a Volt can be changed. */
-const wireViews = (current: IVoltEngine): void => {
+const wireViews = (current: IEngineClient): void => {
     setRenderer(render);
     wirePageVisibility();
     follow(current);
@@ -157,31 +151,28 @@ const startCarrying = (): void => {
     element<HTMLButtonElement>("[data-action='connect']").disabled = true;
     startCarryPanel();
     wireLinkIntake(carryMixLink);
-    readMixFromAddress(carryMixLink);
+    void readMixFromAddress(carryMixLink);
 };
 
-/** The tray window and phones (desktop app only) send intents; only a page that can drive the Volt applies them. */
-const answerOthers = (current: IVoltEngine): void =>
-    wireRemote({
-        isActive: () => current.snapshot().hasControl,
-        snapshot: current.traySnapshot,
-        run: (intent) => (current.snapshot().isLive ? current.runIntent(intent) : "ignored"),
-        onViewOpened: current.reread,
-    });
-
-/** A browser with WebHID drives the Volt, once this tab has control. */
-const startDriving = (current: IVoltEngine): void => {
+/** The website with WebHID: this page runs the engine and drives the Volt, once this tab has control. */
+const startDriving = (engine: IVoltEngine): void => {
     wireLinkIntake(receiveMixLink);
-    takeLinksFromOtherTabs();
-    answerOthers(current);
-    wireDisplayFade();
+    takeLinksFromOtherTabs(engine);
     // A link the page opened with is applied, kept, or sent to the tab in use: known once the lock is.
-    driveVolt(current, () => readMixFromAddress(receiveMixLink));
+    driveVolt(engine, () => void readMixFromAddress(receiveMixLink));
 };
 
 export const start = (): void => {
-    engine = startEngine();
-    wireViews(engine);
+    const desktop = desktopApp();
+    if (desktop) {
+        // The desktop app: the engine runs in its main process, and this page shows it.
+        startDesktopEngine(desktop.engine);
+        wireViews(getEngine());
+        wireLinkIntake(receiveMixLink);
+        return;
+    }
+    const engine = startWebEngine();
+    wireViews(getEngine());
     if (volt.isWebHidSupported()) startDriving(engine);
     else startCarrying();
 };

@@ -1,6 +1,6 @@
 import path from "path";
 import { describe, expect, test } from "vitest";
-import { fileWithin } from "./site-paths";
+import { fileWithin } from "./site-paths.ts";
 
 const root = path.resolve("site");
 

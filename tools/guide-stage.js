@@ -203,12 +203,14 @@
             return areaOf([panel], 12);
         },
         /*
-         * The tray page (src/pages/tray), sent a snapshot the way the main window sends one. As a
-         * phone it has no footer and offers to keep the mix.
+         * The tray page (src/pages/tray), sent a snapshot the way the app's main process sends one,
+         * through the stand-in window.voltTray guide-images.mjs gives it. Its Close button stays
+         * hidden, as in a browser. As a phone it has no footer and offers to keep the mix.
          */
         tray: async (data) => {
-            new BroadcastChannel("volt-mixer").postMessage({ kind: "snapshot", snapshot: data.snapshot });
+            window.__showTraySnapshot(data.snapshot);
             while (!$("[data-tray-rows]").children.length) await new Promise(requestAnimationFrame);
+            $("[data-tray-close]").hidden = true;
             if (data.isPhone) {
                 $(".foot").hidden = true;
                 Object.assign($("[data-tray-keep]"), { hidden: false, href: data.snapshot.mixLink });

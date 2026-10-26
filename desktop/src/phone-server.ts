@@ -1,11 +1,10 @@
 import http from "http";
-import { header, readText, send } from "./http-helpers";
-import { askPage } from "./page-requests";
-import { isSignedBy, issueChallenge, takeChallenge, type ISignedRequest } from "./phone-auth";
-import { refusalFor } from "./phone-rules";
-import { addStream, latestLine, streamNonce, takeSeq } from "./phone-streams";
-import { currentToken } from "./phone-token";
-import { csp, readSiteFile } from "./site-files";
+import { header, readText, send } from "./http-helpers.ts";
+import { isSignedBy, issueChallenge, takeChallenge, type ISignedRequest } from "./phone-auth.ts";
+import { refusalFor } from "./phone-rules.ts";
+import { addStream, latestLine, streamNonce, takeSeq } from "./phone-streams.ts";
+import { currentToken } from "./phone-token.ts";
+import { csp, readSiteFile } from "./site-files.ts";
 
 /*
  * The phone remote's server: the tray page's own files and its API, on one private address. The
@@ -31,6 +30,12 @@ const securityHeaders = {
 };
 const pageFiles = new Set(["/tray/", "/theme.js", "/icon.svg", "/apple-touch-icon.png", "/icon-192.png"]);
 const rates = new Map<string, { second: number; count: number }>();
+/** Applies a phone's change: the engine host's, set by main.ts (answerPhoneIntents). */
+let runIntent = (_intent: unknown): unknown => "ignored";
+
+export const answerPhoneIntents = (run: (intent: unknown) => unknown): void => {
+    runIntent = run;
+};
 
 const remoteIp = (req: http.IncomingMessage): string => req.socket.remoteAddress?.replace(/^::ffff:/, "") ?? "";
 
@@ -96,8 +101,7 @@ const takeIntent = async (req: http.IncomingMessage, res: http.ServerResponse): 
     if (!nonce) return send(res, 409, securityHeaders);
     if (!isSigned(req, facts)) return send(res, 401, securityHeaders);
     if (!takeSeq(facts.client, facts.seq)) return send(res, 200, securityHeaders, { result: "stale" });
-    const result = await askPage("phone-intent", parsed(facts.body));
-    send(res, 200, securityHeaders, { result: result ?? "ignored" });
+    send(res, 200, securityHeaders, { result: runIntent(parsed(facts.body)) });
 };
 
 const handle = async (req: http.IncomingMessage, res: http.ServerResponse, served: string): Promise<void> => {

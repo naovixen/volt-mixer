@@ -36,8 +36,13 @@ three places:
 | `src/data/volt4-gen2.json`           | The same protocol as data, per firmware version, which the code reads.      |
 | `reference/decoded/`                 | Decoded recordings. The tests re-encode every one to prove the code agrees. |
 
-The desktop app (`desktop/`) is [Electron](https://www.electronjs.org): the same site in a window,
-plus a tray mixer and a phone remote. The page still drives the Volt there.
+Everything between the Volt and the screen is the **engine** (`src/lib/engine`): the state, every
+change, what's sent and when, the readings, and this computer's mix. It has no DOM, so it runs in
+two places. On the website it runs in the page, with WebHID and the browser's storage
+(`src/scripts/host-web.ts`). The desktop app (`desktop/`) is [Electron](https://www.electronjs.org):
+there the engine runs in the app's main process, with node-hid and a file
+(`desktop/src/engine-host.ts`). The same site in a window shows it (`src/scripts/host-desktop.ts`),
+plus a tray mixer and a phone remote. The views only read the engine's snapshot and send it changes.
 
 Other useful reading:
 
@@ -112,8 +117,11 @@ src/
                      screenshot sizes (guide-images.json, written by tools/guide-images.mjs)
   content/guide/     the user guide, one MDX file per page
   lib/               pure TypeScript with Vitest tests beside it: protocol encode/decode,
-                     mixer model, sync, saved mix, tapers, meters
-  scripts/           browser code: WebHID connection, controller, sliders, strips, dialogs
+                     mixer model, saved mix, tapers, meters
+  lib/engine/        the engine: state, intents, sync and send pump, readings, mix ownership,
+                     display fade; runs in the page (website) or the app's main process
+  scripts/           browser code: the hosts (web, desktop), WebHID transport, controller,
+                     sliders, strips, dialogs
   components/        ui/ (Slider, Meter, Dialog, Icon), mixer/ (strips, outputs, dialogs), site/, guide/
   layouts/ pages/    BaseLayout and GuideLayout; the mixer page and the desktop app's tray page;
                      pages/_website: what only the website has (the guide's pages and search
@@ -124,7 +132,7 @@ src/
 public/              icon and web app manifest; guide/images, the guide's screenshots
 tools/               capture kit for a Windows PC with UAD Console (Node 24), the guide's
                      screenshot tool and the performance bench (perf-bench.mjs). Not deployed.
-desktop/             Electron app (own package.json)
+desktop/             Electron app: the engine in main (node-hid), the site in a window, a tray mixer (own package.json)
 reference/decoded/   decoded captures the tests check against (serial numbers removed)
 docs/                protocol, maintenance guide, decisions, performance
 ```
@@ -406,6 +414,7 @@ agent to make them in small, separate commits:
 | --------------------------------- | ----------------------------------------------- | ------------------------------------------- |
 | `src/lib/spec.ts`                 | imports `volt4-gen2.json` only                  | every data file, and a lookup by product ID |
 | `src/scripts/transport-webhid.ts` | accepts only `protocol.productId`               | any product ID with a data file             |
+| `desktop/src/hid-transport.ts`    | accepts only `protocol.productId`               | any product ID with a data file             |
 | `src/lib/mixer.ts`                | one fixed `channels` list (Input 1 … Loopback)  | the channel list per model                  |
 | `desktop/scripts/*.mjs`           | the app's Volts and udev rule: `productId` only | every supported product ID                  |
 | `README.md`                       | "Only the Volt 4 Gen 2 works for now"           | your model listed                           |

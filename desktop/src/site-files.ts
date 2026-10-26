@@ -1,7 +1,7 @@
 import { app } from "electron";
 import fs from "fs";
 import path from "path";
-import { fileWithin } from "./site-paths";
+import { fileWithin } from "./site-paths.ts";
 
 /*
  * The built site, for app:// and for the phone. It's packed in app.asar with main's code
@@ -43,15 +43,6 @@ export const readSiteFile = async (pathname: string): Promise<{ body: Buffer; ty
             body: await fs.promises.readFile(file),
             type: contentTypes[path.extname(file)] ?? "application/octet-stream",
         };
-    } catch {
-        return null;
-    }
-};
-
-/** A JSON file the build put in the site for main (desktop-hid.json), or null when it's missing or broken. */
-export const readSiteJson = (name: string): unknown => {
-    try {
-        return JSON.parse(fs.readFileSync(path.join(siteDir, name), "utf8")) as unknown;
     } catch {
         return null;
     }

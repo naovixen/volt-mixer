@@ -8,7 +8,7 @@ non-technical); the user guide is `src/content/guide` (MDX, served at `/guide/`,
 interface.
 `docs/decisions.md` records the choices code cannot explain; `docs/protocol.md` is the
 reverse-engineered HID protocol; `docs/maintaining.md` is the update loop for new UA firmware or
-software.
+software; `docs/performance.md` is how CPU and memory are measured (`tools/perf-bench.mjs`).
 
 ## Working rules
 
@@ -38,18 +38,21 @@ Conventions follow `../naovixen` (its `CLAUDE.md` and `.claude/rules/`), with th
 src/
   data/              the protocol as data, per firmware (volt4-gen2.json)
   lib/               pure TypeScript with Vitest tests beside it: protocol encode/decode,
-                     mixer model, sync, saved mix, tapers, meters
-  scripts/           browser code: WebHID connection, controller, sliders, strips, dialogs
+                     mixer model, saved mix, tapers, meters
+  lib/engine/        the engine: state, intents, sync and send pump, readings, mix ownership,
+                     display fade; runs in the page (website) or the app's main process
+  scripts/           browser code: the hosts (web, desktop), WebHID transport, controller,
+                     sliders, strips, dialogs
   components/        ui/ (Slider, Meter, Dialog, Icon), mixer/ (strips, outputs, dialogs), site/, guide/
   content/guide/     the user guide, one MDX page each
   layouts/ pages/    BaseLayout and GuideLayout; the mixer page, the tray page, the guide's route
   styles/            tokens (light-dark pairs), reset, base, button, in layers; guide*.css (guide only)
   icons/             SVG icons, with their licences
 public/              icon and web app manifest; guide/images (from tools/guide-images.mjs)
-tools/               home-PC capture kit and guide screenshots (Node 24; imports src/lib). Not deployed.
-desktop/             Electron app: the site in a window plus a tray mixer (own package.json)
+tools/               home-PC capture kit, guide screenshots, perf bench (Node 24; imports src/lib). Not deployed.
+desktop/             Electron app: the engine in main (node-hid), the site in a window, a tray mixer (own package.json)
 reference/decoded/   decoded captures the tests check against (serials redacted)
-docs/                protocol, maintenance guide, decisions
+docs/                protocol, maintenance guide, decisions, performance
 ```
 
 ## Names and style

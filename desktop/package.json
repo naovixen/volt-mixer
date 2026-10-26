@@ -11,7 +11,8 @@
         "url": "https://github.com/naovixen/volt-mixer"
     },
     "private": true,
-    "main": "out/main.js",
+    "type": "module",
+    "main": "out/desktop/src/main.js",
     "packageManager": "pnpm@12.8.1",
     "scripts": {
         "postinstall": "node node_modules/electron/install.js",

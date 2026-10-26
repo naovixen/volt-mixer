@@ -5,7 +5,6 @@ import { desktopApp } from "./desktop.ts";
 import { getEngine, snap } from "./engine-client.ts";
 import { cloneIcon } from "./icons.ts";
 import { runPageIntent } from "./run-intent.ts";
-import { saveTrayHidden } from "./store.ts";
 
 /*
  * The channel dialog's card with the channel's icon and name, as its strip shows them. The icon
@@ -59,7 +58,6 @@ export const refreshChannelIcon = (ids: ChannelId[]): void => {
 const setShown = (ids: ChannelId[], isShown: boolean): void => {
     const hidden = snap().view.trayHidden.filter((id) => !(ids as string[]).includes(id));
     const trayHidden = isShown ? hidden : [...hidden, ...ids];
-    saveTrayHidden(trayHidden);
     getEngine().setView({ trayHidden });
 };
 

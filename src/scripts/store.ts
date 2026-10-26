@@ -102,3 +102,41 @@ export const engineStore: IEngineStore = {
     loadBrightness,
     saveBrightness,
 };
+
+/** Every key under `prefix`, by what follows it (a Volt's serial). */
+const keysUnder = (prefix: string): Record<string, unknown> => {
+    const found: Record<string, unknown> = {};
+    try {
+        for (const key of Object.keys(localStorage))
+            if (key.startsWith(prefix)) found[key.slice(prefix.length)] = read(key);
+    } catch {
+        /* Storage unavailable: nothing to hand over. */
+    }
+    return found;
+};
+
+/**
+ * What the desktop app's page kept before the app's engine moved to its main process
+ * (desktop/src/store-file.ts takes it); null when there's no mix to hand over.
+ */
+export const legacyStore = (): Record<string, unknown> | null => {
+    // Through loadMix: a mix saved by 0.2.0 is wrapped with its date.
+    const mixes = Object.fromEntries(
+        Object.keys(keysUnder(`${prefix}.mix.`)).map((serial) => [serial, loadMix(serial)]),
+    );
+    if (Object.keys(mixes).length === 0 && read(pendingKey) === null) return null;
+    return {
+        mixes,
+        brightness: keysUnder(`${prefix}.brightness.`),
+        pendingMix: read(pendingKey),
+        view: read(viewKey),
+        trayHidden: read(trayKey),
+    };
+};
+
+/** Once main has it, the page's copy goes, so it's handed over only once. */
+export const clearLegacyStore = (): void => {
+    for (const serial of Object.keys(keysUnder(`${prefix}.mix.`))) write(mixKey(serial), null);
+    for (const serial of Object.keys(keysUnder(`${prefix}.brightness.`))) write(brightnessKey(serial), null);
+    [pendingKey, viewKey, trayKey].forEach((key) => write(key, null));
+};

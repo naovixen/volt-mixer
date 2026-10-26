@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { clean, defaults } from "./settings-rules";
+import { clean, defaults } from "./settings-rules.ts";
 
 describe("Using clean, when a change has a key the app doesn't know", () => {
     test("then it should drop it", () => {

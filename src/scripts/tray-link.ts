@@ -1,9 +1,11 @@
-import { isRemoteIntent } from "../lib/intents.ts";
+import type { ITraySnapshot } from "../lib/engine/engine.ts";
+import { isRemoteIntent, type IntentResult, type RemoteIntent } from "../lib/intents.ts";
 import { signRequest, type ISignedRequest } from "../lib/phone-signature.ts";
-import { openChannel, type RemoteMessage } from "./remote.ts";
+import { trayApp } from "./desktop.ts";
 
 /*
- * How the tray page reaches the main window. In the desktop app it's a BroadcastChannel. On a
+ * How the tray page reaches the engine in the desktop app's main process. In the app's tray window
+ * it's the window's preload (desktop/src/tray-preload.cts). On a
  * phone (served by desktop/src/phone-server.ts, opened from the QR code's #t=… link) it's HTTP:
  * updates stream down as JSON lines, and changes go up one at a time, newest first, each with a
  * rising sequence number so the app can drop any that arrive late. Every request is signed with
@@ -13,20 +15,35 @@ import { openChannel, type RemoteMessage } from "./remote.ts";
 
 export type LinkStatus = "connected" | "lost" | "unpaired";
 
+/** What the tray page hears: what to show, or why a change waits (this computer has no mix yet). */
+export type TrayMessage = { kind: "snapshot"; snapshot: ITraySnapshot } | { kind: "result"; result: IntentResult };
+
 export interface ITrayLink {
     isPhone: boolean;
-    send: (message: RemoteMessage) => void;
-    listen: (onMessage: (message: Partial<RemoteMessage>) => void, onStatus: (status: LinkStatus) => void) => void;
+    sendIntent: (intent: RemoteIntent) => void;
+    /** Starts listening, and asks for what to show now. */
+    listen: (onMessage: (message: TrayMessage) => void, onStatus: (status: LinkStatus) => void) => void;
 }
 
-const broadcastLink = (): ITrayLink => {
-    const channel = openChannel();
+/** The app's tray window: its preload carries the changes and the snapshots. */
+const windowLink = (tray: NonNullable<ReturnType<typeof trayApp>>): ITrayLink => {
+    let onMessage = (_message: TrayMessage): void => {};
     return {
         isPhone: false,
-        send: (message) => channel?.postMessage(message),
-        listen: (onMessage) => channel?.addEventListener("message", (event) => onMessage(event.data)),
+        sendIntent: (intent) =>
+            void tray
+                .sendIntent(intent)
+                .then((result) => result === "needsMix" && onMessage({ kind: "result", result })),
+        listen: (listen) => {
+            onMessage = listen;
+            tray.onSnapshot((snapshot) => listen({ kind: "snapshot", snapshot: snapshot as ITraySnapshot }));
+            tray.hello();
+        },
     };
 };
+
+/** A tray page opened anywhere else (the website): there's no app to reach. */
+const noLink: ITrayLink = { isPhone: false, sendIntent: () => {}, listen: () => {} };
 
 const tokenKey = "volt-mixer.phone-token";
 
@@ -68,7 +85,7 @@ interface IPhone {
     seq: number;
     isSending: boolean;
     retryMs: number;
-    onMessage: (message: Partial<RemoteMessage>) => void;
+    onMessage: (message: TrayMessage) => void;
     onStatus: (status: LinkStatus) => void;
 }
 
@@ -129,7 +146,7 @@ const connect = async (phone: IPhone): Promise<void> => {
     if (response?.ok && response.body) {
         phone.onStatus("connected");
         phone.retryMs = 1000;
-        const onLine = (line: string): void => phone.onMessage(JSON.parse(line) as Partial<RemoteMessage>);
+        const onLine = (line: string): void => phone.onMessage(JSON.parse(line) as TrayMessage);
         await readLines(response.body, onLine).catch(() => {});
     }
     phone.nonce = "";
@@ -151,10 +168,10 @@ const newPhone = (token: string): IPhone => ({
 });
 
 /** Only the newest change to each thing waits to go: a fader's older positions are dropped. */
-const queueIntent = (phone: IPhone, message: RemoteMessage): void => {
-    if (message.kind !== "intent" || !isRemoteIntent(message.intent)) return;
-    const intent = message.intent as { type: string; ids?: string[] };
-    phone.pending.set(`${intent.type}:${intent.ids?.join(",") ?? ""}`, intent);
+const queueIntent = (phone: IPhone, intent: RemoteIntent): void => {
+    if (!isRemoteIntent(intent)) return;
+    const ids = "ids" in intent ? intent.ids.join(",") : "";
+    phone.pending.set(`${intent.type}:${ids}`, intent);
     void drain(phone);
 };
 
@@ -162,7 +179,7 @@ const phoneLink = (token: string): ITrayLink => {
     const phone = newPhone(token);
     return {
         isPhone: true,
-        send: (message) => queueIntent(phone, message),
+        sendIntent: (intent) => queueIntent(phone, intent),
         listen: (onMessage, onStatus) => {
             Object.assign(phone, { onMessage, onStatus });
             void connect(phone);
@@ -170,8 +187,10 @@ const phoneLink = (token: string): ITrayLink => {
     };
 };
 
-/** The link for this page: HTTP when it was opened on a phone with a pairing token. */
+/** The link for this page: the app's tray window, or HTTP when it was opened on a phone with a pairing token. */
 export const openTrayLink = (): ITrayLink => {
+    const tray = trayApp();
+    if (tray) return windowLink(tray);
     const token = location.protocol === "http:" ? phoneToken() : "";
-    return token ? phoneLink(token) : broadcastLink();
+    return token ? phoneLink(token) : noLink;
 };

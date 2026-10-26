@@ -213,3 +213,12 @@ export const isRemoteIntent = (value: unknown): value is RemoteIntent => {
     if (type === "mute") return isIdList(ids) && typeof to === "boolean";
     return (type === "monitorMute" || type === "headphoneMute") && typeof to === "boolean";
 };
+
+/**
+ * Whether a message from the app's own page names a change applyIntent knows. Its fields are
+ * checked as it's applied (clamped, or refused if they don't fit).
+ */
+export const isKnownIntent = (value: unknown): value is Intent => {
+    const type = typeof value === "object" && value !== null ? (value as { type?: unknown }).type : undefined;
+    return typeof type === "string" && Object.hasOwn(appliers, type);
+};

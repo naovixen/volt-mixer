@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { signRequest, signedText as phoneSignedText } from "../../src/lib/phone-signature.ts";
-import { isSignedBy, issueChallenge, signedText, takeChallenge } from "./phone-auth";
+import { isSignedBy, issueChallenge, signedText, takeChallenge } from "./phone-auth.ts";
 
 const token = "k3Jq9vXr2LmT8wZp4YbN6cHd1sFg7uEa0oIy5tRw-_Q";
 const request = {

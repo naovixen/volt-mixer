@@ -4,7 +4,7 @@ import { cueNames, type CueName } from "../lib/mixer.ts";
 import { getEngine, snap, viewSpec } from "./engine-client.ts";
 import { runPageIntent } from "./run-intent.ts";
 import { setSliderDisabled, setSliderValue } from "./slider.ts";
-import { saveTheme, saveView } from "./store.ts";
+import { saveTheme } from "./store.ts";
 import { applyTheme, currentTheme, isTheme } from "./theme.ts";
 import { refreshMixLink, wireMixLink } from "./mix-link.ts";
 import { wireDesktopSettings } from "./desktop-settings.ts";
@@ -82,7 +82,6 @@ const changeView = (view: "isDigitalShown" | "isLoopbackShown", isShown: boolean
     const { isDigitalShown, isLoopbackShown } = snap().view;
     const next = { isDigitalShown, isLoopbackShown };
     next[view] = isShown;
-    saveView(next);
     getEngine().setView(next);
 };
 

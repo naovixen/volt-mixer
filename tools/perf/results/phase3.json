@@ -1,0 +1,120 @@
+{
+    "label": "phase3",
+    "at": "2026-10-26T13:19:21.060Z",
+    "cores": 8,
+    "cpu": "Intel(R) Core(TM) i7-9700K CPU @ 3.60GHz",
+    "desktop": [
+        {
+            "scenario": "window open, idle",
+            "processes": 4,
+            "cpuPercentMachine": 0.68,
+            "cpuPercentOneCore": 5.4,
+            "privateSetMB": 106,
+            "privateBytesMB": 210,
+            "pageTaskMsPerS": 18,
+            "pageScriptMsPerS": 0.8,
+            "layoutsPerS": 0,
+            "styleRecalcsPerS": 23.5,
+            "jsHeapMB": 2.2,
+            "hidWritesPerS": 0.7,
+            "hidWrites": {}
+        },
+        {
+            "scenario": "window open, drag",
+            "processes": 4,
+            "cpuPercentMachine": 7.28,
+            "cpuPercentOneCore": 58.3,
+            "privateSetMB": 165,
+            "privateBytesMB": 279,
+            "pageTaskMsPerS": 198.2,
+            "pageScriptMsPerS": 26.6,
+            "layoutsPerS": 125.9,
+            "styleRecalcsPerS": 139,
+            "jsHeapMB": 2.7,
+            "hidWritesPerS": 48,
+            "hidWrites": {}
+        },
+        {
+            "scenario": "in the tray",
+            "processes": 4,
+            "cpuPercentMachine": 0.07,
+            "cpuPercentOneCore": 0.6,
+            "privateSetMB": 62,
+            "privateBytesMB": 130,
+            "hidWritesPerS": 0.7,
+            "hidWrites": {}
+        }
+    ],
+    "web": [
+        {
+            "scenario": "idle",
+            "processes": 10,
+            "cpuPercentMachine": 1.96,
+            "cpuPercentOneCore": 15.7,
+            "privateSetMB": 174,
+            "privateBytesMB": 285,
+            "pageTaskMsPerS": 26.8,
+            "pageScriptMsPerS": 4.1,
+            "layoutsPerS": 0,
+            "styleRecalcsPerS": 33.6,
+            "jsHeapMB": 1.7,
+            "hidWritesPerS": 0.7,
+            "hidWrites": {
+                "240:17": 11
+            }
+        },
+        {
+            "scenario": "drag",
+            "processes": 8,
+            "cpuPercentMachine": 10.24,
+            "cpuPercentOneCore": 81.9,
+            "privateSetMB": 188,
+            "privateBytesMB": 299,
+            "pageTaskMsPerS": 240,
+            "pageScriptMsPerS": 32.6,
+            "layoutsPerS": 125.5,
+            "styleRecalcsPerS": 144.9,
+            "jsHeapMB": 1.9,
+            "hidWritesPerS": 70.6,
+            "hidWrites": {
+                "240:17": 7,
+                "240:1": 418
+            }
+        },
+        {
+            "scenario": "hidden",
+            "processes": 7,
+            "cpuPercentMachine": 0.06,
+            "cpuPercentOneCore": 0.5,
+            "privateSetMB": 156,
+            "privateBytesMB": 262,
+            "pageTaskMsPerS": 5.5,
+            "pageScriptMsPerS": 1.7,
+            "layoutsPerS": 0,
+            "styleRecalcsPerS": 0,
+            "jsHeapMB": 2.1,
+            "hidWritesPerS": 0.7,
+            "hidWrites": {
+                "240:17": 11
+            },
+            "visibility": "hidden"
+        },
+        {
+            "scenario": "shown again (3 s)",
+            "processes": 7,
+            "cpuPercentMachine": 1.16,
+            "cpuPercentOneCore": 9.3,
+            "privateSetMB": 162,
+            "privateBytesMB": 270,
+            "pageTaskMsPerS": 28.6,
+            "pageScriptMsPerS": 4.9,
+            "layoutsPerS": 0.7,
+            "styleRecalcsPerS": 32.8,
+            "jsHeapMB": 2,
+            "hidWritesPerS": 1.3,
+            "hidWrites": {
+                "240:17": 4
+            }
+        }
+    ]
+}

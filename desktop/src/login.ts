@@ -2,7 +2,7 @@ import { app } from "electron";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import type { IDesktopSettings } from "./settings";
+import type { IDesktopSettings } from "./settings.ts";
 
 /*
  * Start at login. Windows and macOS have login items; Linux uses an XDG autostart file. Windows

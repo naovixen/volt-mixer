@@ -174,6 +174,12 @@ const launch = async (profile) => {
 };
 
 const stage = fs.readFileSync(path.join(here, "guide-stage.js"), "utf8");
+/* The tray page asks the app's preload for its rows (src/scripts/tray-link.ts); this stands in for it. */
+const trayStandIn = `window.voltTray = {
+    fitTray: () => {}, hideTray: () => {}, openMainWindow: () => {}, hello: () => {},
+    sendIntent: async () => "ok",
+    onSnapshot: (listen) => { window.__showTraySnapshot = listen; },
+};`;
 const ready = fs.readFileSync(path.join(here, "guide-ready.js"), "utf8");
 
 /** Shoots one shot in one theme; returns the size the guide shows it at. */
@@ -202,6 +208,7 @@ const shoot = async (cdp, file, { scene, data, view, zoom = 1, badge = 26, mobil
 const shootAll = async (cdp) => {
     await cdp.send("Page.enable");
     await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: ready });
+    await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: trayStandIn });
     const sizes = {};
     for (const theme of ["light", "dark"]) {
         for (const [file, shot] of Object.entries(shots)) sizes[file] = await shoot(cdp, file, shot, theme);

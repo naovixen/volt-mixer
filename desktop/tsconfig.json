@@ -11,9 +11,11 @@
         "noImplicitOverride": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
+        "resolveJsonModule": true,
+        "rewriteRelativeImportExtensions": true,
         "outDir": "out",
-        "rootDir": "src"
+        "rootDir": ".."
     },
-    "include": ["src/**/*.ts"],
-    "exclude": ["src/**/*.test.ts"]
+    "include": ["src/**/*.ts", "src/**/*.cts", "../src/lib/**/*.ts", "../src/data/*.json"],
+    "exclude": ["src/**/*.test.ts", "../src/lib/**/*.test.ts", "../src/lib/engine/test-volt.ts"]
 }

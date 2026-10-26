@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { isNewer } from "./versions";
+import { isNewer } from "./versions.ts";
 
 describe("Using isNewer, when the release is a patch ahead", () => {
     test("then it should count as newer", () => {

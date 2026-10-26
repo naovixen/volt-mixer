@@ -19,8 +19,8 @@ off"). With script off it explains what it is and what it needs.
 
 The Volt reports everything except crosspoint gains (fader, pan and cue-send positions) and cue
 routing. Console doesn't read them either: it pushes its own saved mix every time it starts.
-The page does the same: on connect it reads the state dump, then applies this computer's saved mix
-(per Volt serial, in localStorage). Readable settings (mutes, 48V, gain, tone, links, levels) always
+Volt Mixer does the same: on connect it reads the state dump, then applies this computer's saved
+mix (per Volt serial: in localStorage on the website, in a file in the desktop app). Readable settings (mutes, 48V, gain, tone, links, levels) always
 come from the Volt. Each computer keeps its own copy; a `#mix=` link carries it to the other one.
 Until a computer has a mix, no level is sent. `docs/remote-sync.md` looks at keeping that copy in
 step over the network, and at phone control.
@@ -87,28 +87,43 @@ whose it is. Reaching into a slot or a child component is deliberate and says so
 `:global()`, preferably on a direct child (`.link-field > :global(.button)`). The global
 stylesheets in `src/styles` are unscoped anyway, so they nest freely.
 
-## The desktop app is Electron, and the page drives the Volt there too
+## The desktop app is Electron, and its engine drives the Volt from main
 
 `desktop/` wraps the same site in Electron for home computers that want it without a browser,
-with a tray mixer. Electron ships Chromium, so WebHID works the same on Windows, macOS and Linux
-and the page's own connection code (`src/scripts/transport-webhid.ts`) runs unchanged; main only
-grants the permission Chrome would ask for. A smaller shell (Tauri) uses the system web view, which
-has no WebHID on macOS or Linux, so the USB part would have to be rewritten natively.
+with a tray mixer. Electron ships Chromium, so the page looks and behaves the same on Windows,
+macOS and Linux. A smaller shell (Tauri) uses the system web view, which can't run this site's
+code as it is.
 
+The page used to drive the Volt there too, over WebHID, so the main window had to stay open
+(hidden) while the app was in the tray: two renderer processes kept alive for windows no one could
+see, every meter report crossing into one of them, and phones and display dimming asking that page.
+Now the engine (`src/lib/engine`, the same code the website runs in its page) runs in main,
+with node-hid (`desktop/src/engine-host.ts`, `hid-transport.ts`) and its memory in a file
+(`store-file.ts`). Windows only show it, so they close for real when the app goes to the tray: in
+the tray no page runs at all. It costs a moment to open the window again, and a new tray window
+after a couple of minutes hidden.
+
+- node-hid has no plug-in events, so main looks for the Volt every 3 s, only while none is
+  connected (after a KVM switch, say). A failed read or write means it's gone, as on the website.
+- The main window's page shows a copy of the engine (`src/lib/engine/mirror.ts`, kept up to date
+  by patches at most 30 a second). A change made there applies to the copy at once and goes to
+  main numbered, so a patch from before it can't put a fader back mid-drag.
+- The page used to keep this computer's mix in its storage. The page hands it to main the first
+  time (only what main doesn't have yet), and on a first start in the tray the window opens hidden
+  for that alone.
 - The site is served from `app://volt/`, a secure origin where its root-absolute URLs resolve, with
-  a strict CSP (`script-src 'self'`; `public/theme.js` is a file for that reason).
-- The main window keeps the only connection to the Volt, so it's hidden rather than closed while
-  the app is in the tray (`backgroundThrottling: false`, and `commit()` doesn't rely on animation
-  frames). The tray window (`src/pages/tray`) only draws rows and sends intents
-  (`src/lib/intents.ts`) over a `BroadcastChannel`; the main window checks and applies them.
-- Each window has its own preload: the tray's can only size and hide itself and open the main
-  window, and main answers each IPC message only from the window it's for (`isFromMainWindow`,
-  `isFromTrayWindow`), so a tray page can't reach the settings, the phone remote's pairing link or
-  the Volt.
+  a strict CSP (`script-src 'self'`; `public/theme.js` is a file for that reason). No page gets
+  WebHID or any other device.
+- Each window has its own preload: the tray's can change levels and mutes (main checks each,
+  `isRemoteIntent`), size and hide itself and open the main window; main answers each IPC message
+  only from the window it's for (`isFromMainWindow`, `isFromTrayWindow`), so a tray page can't
+  reach the settings or the phone remote's pairing link.
 - Builds are unsigned (GitHub Releases): no paid certificates. macOS builds are signed ad hoc so
   Apple silicon opens them. Updates are a check and a link, not an automatic install.
-- Electron, electron-builder and the main process's TypeScript live in `desktop/` with their own
-  `package.json`, so the site's toolchain stays Astro, TypeScript, Vitest and Prettier.
+- Electron, electron-builder, node-hid and the main process's TypeScript live in `desktop/` with
+  their own `package.json`, so the site's toolchain stays Astro, TypeScript, Vitest and Prettier.
+  Main is an ES module, compiled with `src/lib` (the preloads stay CommonJS, as sandboxed preloads
+  must be).
 
 ## Other devices without a server
 
@@ -147,15 +162,15 @@ and say so. UAD Console doesn't re-read, so it isn't noticed.
 ## Every change is an intent
 
 Each change a user makes, from the page's controls, the tray window or a phone, is an intent
-(`src/lib/intents.ts`) applied by `applyIntent` and committed by `src/scripts/run-intent.ts`, so
+(`src/lib/intents.ts`) applied by `applyIntent` and committed by the engine's `runIntent`, so
 clamping, "this needs the mix first" and the linked-pair rules live in one place and the views
-never write page state: an intent for one side of a linked pair moves both, whatever view sent it.
+never write state: an intent for one side of a linked pair moves both, whatever view sent it.
 The views don't re-check "needs the mix" either: a fader moved before this computer has a mix is
 refused by `applyIntent`, put back, and the page says why. Another window or a phone may only send
 the remote intents (`isRemoteIntent`), the ones the tray has: levels and mutes, each mute saying
 where it goes (`to`), since a message can arrive twice. Not solo, links, mono, 48V, routing or
-names. Only the desktop app answers them: its origin is its own, while on the website any page
-of the same origin could post to the channel.
+names. Only the desktop app answers them, in main: the tray window through its preload, phones
+through the phone server.
 
 ## Lasting conditions aren't messages
 
@@ -175,19 +190,30 @@ channel back up.
 
 ## Unseen, the app idles
 
-The desktop app spends most of its life in the tray, so the hidden main window must cost next to
-nothing. Background throttling stays off (the hidden window answers the tray, phones and the Volt
-on time, and keeps re-reading the Volt every 1.5 s, which is how a Volt Mixer in a browser notices
-the app and leaves it the mix), but that also makes the hidden page count as visible. So the app
-tells the page when its window is shown (`window:visible`, `src/scripts/page-visibility.ts`), and
-while it's unseen the page neither reads the Volt's 50-a-second meter reports nor updates its
-views; it catches up when shown. Seen, a meter is drawn only while it moves, and a peak falls by
-time, not by frames.
+The desktop app spends most of its life in the tray, where it now has no window open, so it's
+main alone: it reads the Volt's 50-a-second meter reports but drops them unread, and re-reads the
+Volt every 1.5 s (which is how a Volt Mixer in a browser notices the app and leaves it the mix). On
+the website, a hidden page does the same: no meters are read and no views drawn, and it catches up
+when shown. Seen, the engine passes on at most 30 meter frames a second (each the highest peak
+since the last), a meter is drawn only when it moves by a pixel, and a peak falls by time, not by
+frames.
+
+## Writes go at a fixed pace, not once a frame
+
+A change used to be sent once per screen frame. On a 240 Hz screen a fader drag then sent its
+crosspoints 240 times a second, more than a full-speed USB link takes in, and every frame
+recomputed every crosspoint and redrew every view. Now the engine sends at most every 20 ms
+(`src/lib/engine/send-pump.ts`), the latest value of each control wins, and while a batch is still
+being written the next one waits for it, so the queue never falls behind the hand. Only the
+crosspoints of the channels a change touched are worked out again (`sync.ts`); a solo, a link or a
+new mix compares them all. The views draw once a frame, and only what changed (the change's
+topics, `changes.ts`). `docs/performance.md` has the numbers.
 
 ## The page picks its mode first
 
 A browser with WebHID drives a Volt; one without (a phone, Firefox, Safari) can only carry a mix
-link to a computer that can. The controller decides which before wiring anything, and gives each
+link to a computer that can; the desktop app shows the engine in its main process. The controller
+decides which before wiring anything, and gives each
 mode its own way to take in a link (`LinkReceiver`): applied or kept for the Volt, or carried. A
 second link opened on a phone used to be kept as if a Volt would connect.
 
@@ -195,16 +221,16 @@ second link opened on a phone used to be kept as if a Volt would connect.
 
 With its computer off, the Volt shows its Host screen at the stored display brightness (its
 button lights flash whatever we do, `docs/protocol.md`), so the desktop app can turn the display
-off at sleep and shutdown (Settings › Desktop app). Windows goes on with a shutdown as soon as the
-window answers `WM_QUERYENDSESSION`, too soon for a report sent from the page, and holding main
-doesn't help because the request to the page waits too. So main writes the report itself with
-node-hid (`desktop/src/display-fade.ts`), synchronously, before it answers: about 20 ms. The build
-works the report out from `src/lib/commands.ts` into the site (`desktop-hid.json`, read by
-`desktop/src/volt-hid.ts`), so the protocol stays in `src/data` and main never writes bytes a page
-gave it. The page only says whether it's driving a Volt: one with firmware it doesn't know waits
-for the user's go-ahead, and so does this. Off is raw 1, which
-nothing else sets, so whichever page connects next, on either computer, fades it back up. A
-Windows service or a shutdown script would also get time, but each needs installing per computer.
+off at sleep and shutdown (Settings › Desktop app). Windows goes on with a shutdown as soon as a
+window answers `WM_QUERYENDSESSION`, too soon for a report waiting its turn in the engine's queue.
+So main also writes the report itself with node-hid on a handle of its own
+(`desktop/src/display-fade.ts`), synchronously, before it answers: about 20 ms. Windows tells only
+windows, and in the tray none is open, so a window that's never shown and has no page (an Electron
+`BaseWindow`) hears it for the app. The report comes from `src/lib/commands.ts` for the connected
+Volt's firmware. Only while the engine drives the Volt: one with firmware it doesn't know waits for
+the user's go-ahead, and so does this. Off is raw 1, which nothing else sets, so whichever Volt
+Mixer connects next, on either computer, fades it back up. A Windows service or a shutdown script
+would also get time, but each needs installing per computer.
 
 ## The guide is MDX, with no docs framework
 

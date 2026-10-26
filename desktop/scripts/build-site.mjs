@@ -2,10 +2,8 @@
 // VOLT_TARGET=desktop serves it from the root of the app://volt scheme and leaves out the pages the
 // app opens on the website instead (astro.config.ts).
 import { execFileSync } from "child_process";
-import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
-import { desktopHid } from "../../src/lib/desktop-hid.ts";
 
 const desktop = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const root = path.join(desktop, "..");
@@ -21,7 +19,3 @@ execFileSync(
         env: { ...process.env, VOLT_TARGET: "desktop" },
     },
 );
-
-// What main needs from the protocol (the Volts it may open, the report that dims them), from
-// src/lib, since main can't import it (src/lib/desktop-hid.ts, read by desktop/src/volt-hid.ts).
-fs.writeFileSync(path.join(site, "desktop-hid.json"), JSON.stringify(desktopHid()));

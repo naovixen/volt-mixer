@@ -1,5 +1,6 @@
 import {
     app,
+    BaseWindow,
     BrowserWindow,
     nativeTheme,
     screen,
@@ -9,39 +10,53 @@ import {
     type Rectangle,
 } from "electron";
 import path from "path";
-import { websiteUrl } from "./app-info";
-import { appOrigin, isFromWindow } from "./protocol";
-import { loadSettings } from "./settings";
+import { websiteUrl } from "./app-info.ts";
+import { appOrigin, isFromWindow } from "./protocol.ts";
+import { loadSettings } from "./settings.ts";
 
 /*
- * The main window drives the Volt (the page's WebHID code runs there), so it's hidden rather than
- * closed while the app lives in the tray. The tray window is a small view of it (src/pages/tray).
+ * The app's windows only show what the engine in main holds (engine-host.ts), so none has to stay
+ * open for the Volt's sake. The main window is made when it's opened and closed for real when it
+ * goes to the tray; the tray window is made when it's first shown and closed after a while hidden.
+ * In the tray, then, no page is running at all.
  */
 
 const isLinux = process.platform === "linux";
 /* The tray's width; its height follows its rows (fitTrayWindow). */
 const trayWindowSize = { width: 340, height: 300 };
+/** A tray window hidden this long is closed; the next click makes a new one (a moment slower). */
+const trayKeepMs = 2 * 60_000;
+/** A new tray window waits this long at most for its page to say how tall it is. */
+const trayReadyMs = 1500;
+
 let mainWindow: BrowserWindow | null = null;
 let trayWindow: BrowserWindow | null = null;
 let isQuitting = false;
 let trayHiddenAt = 0;
 let trayIcon: Rectangle | undefined;
+let trayCloseTimer: NodeJS.Timeout | undefined;
+/** Run when a page in the main window has loaded (it knows nothing yet), and when the tray window is shown. */
+const onMainLoaded = new Set<(window: BrowserWindow) => void>();
+let onTrayShown = (): void => {};
 
 /** Lets close and quit through: set when the user chose Quit, or the system is shutting down. */
 export const markQuitting = (): void => {
     isQuitting = true;
 };
 
+export const whenMainLoaded = (listen: (window: BrowserWindow) => void): void => void onMainLoaded.add(listen);
+export const whenTrayShown = (listen: () => void): void => {
+    onTrayShown = listen;
+};
+
 /** Each window gets only its own preload's API. */
 const webPreferences = (preload: string) => ({
-    preload: path.join(__dirname, preload),
+    preload: path.join(import.meta.dirname, preload),
     sandbox: true,
     contextIsolation: true,
     nodeIntegration: false,
     // On Linux, a spellchecker would fetch its dictionaries from Google; nothing here needs one.
     spellcheck: false,
-    // Hidden, the main window still answers the tray and sends to the Volt; the tray sizes itself.
-    backgroundThrottling: false,
 });
 
 export const isFromMainWindow = (event: IpcMainEvent | IpcMainInvokeEvent): boolean => isFromWindow(event, mainWindow);
@@ -53,8 +68,8 @@ const lockNavigation = (window: BrowserWindow): void => {
         if (url.startsWith("https://")) void shell.openExternal(url);
         return { action: "deny" };
     });
-    // The windows stay on their page (the mixer drives the Volt). A link to the web opens in the
-    // browser, and so does any other page of the site (the guide, Privacy), from the website itself.
+    // The windows stay on their page. A link to the web opens in the browser, and so does any
+    // other page of the site (the guide, Privacy), from the website itself.
     window.webContents.on("will-navigate", (event, url) => {
         event.preventDefault();
         if (url.startsWith("https://")) return void shell.openExternal(url);
@@ -65,32 +80,41 @@ const lockNavigation = (window: BrowserWindow): void => {
 
 const background = (): string => (nativeTheme.shouldUseDarkColors ? "#171615" : "#f5f3ef");
 
-/** A page that crashes is loaded again: the main window's holds the only connection to the Volt. */
+/** A page that crashes is loaded again, unless it crashes again straight away. */
 const reloadAfterCrash = (window: BrowserWindow): void => {
     let crashedAt = 0;
     window.webContents.on("render-process-gone", (_event, { reason }) => {
-        // Crashing again straight away would only crash again; it waits for the next one.
         const isLooping = Date.now() - crashedAt < 10_000;
         crashedAt = Date.now();
         if (reason !== "clean-exit" && !isLooping && !isQuitting && !window.isDestroyed()) window.webContents.reload();
     });
 };
 
-/** Close and minimise put the window in the tray (if chosen); closing it for real quits the app. */
+/**
+ * Close and minimise put the window in the tray (if chosen): it closes, and the app stays. Closed
+ * any other way, the app quits.
+ */
 const keepInTray = (window: BrowserWindow): void => {
-    window.on("close", (event) => {
-        if (isQuitting || !loadSettings().closeToTray) return;
-        event.preventDefault();
-        window.hide();
+    let isToTray = false;
+    window.once("show", () => handOverWindows.delete(window));
+    window.on("close", () => {
+        isToTray = !isQuitting && (isToTray || loadSettings().closeToTray);
     });
-    // Closed for real (not to the tray): nothing drives the Volt any more, so the app quits.
     window.on("closed", () => {
-        mainWindow = null;
-        app.quit();
+        if (mainWindow === window) mainWindow = null;
+        // One opened only for the hand-over closes without a word; the app goes on in the tray.
+        if (!isToTray && !handOverWindows.has(window)) app.quit();
     });
-    // Minimise can't be cancelled, so the window minimises and then hides.
-    window.on("minimize", () => loadSettings().minimiseToTray && window.hide());
+    // Minimise can't be cancelled, so the window minimises and then closes.
+    window.on("minimize", () => {
+        if (!loadSettings().minimiseToTray) return;
+        isToTray = true;
+        window.close();
+    });
 };
+
+/** Main windows opened hidden, only for the page's old storage, until shown. */
+const handOverWindows = new WeakSet<BrowserWindow>();
 
 export const createMainWindow = (isShown: boolean): BrowserWindow => {
     const window = new BrowserWindow({
@@ -101,27 +125,70 @@ export const createMainWindow = (isShown: boolean): BrowserWindow => {
         show: false,
         autoHideMenuBar: true,
         backgroundColor: background(),
-        webPreferences: webPreferences("preload.js"),
+        webPreferences: webPreferences("preload.cjs"),
     });
     mainWindow = window;
+    if (!isShown) handOverWindows.add(window);
     lockNavigation(window);
     reloadAfterCrash(window);
     window.once("ready-to-show", () => isShown && window.show());
     keepInTray(window);
-    tellVisibility(window, "window:visible");
+    window.webContents.on("did-finish-load", () => onMainLoaded.forEach((listen) => listen(window)));
     void window.loadURL(`${appOrigin}/`);
     return window;
 };
 
-/** The window that drives the Volt (and holds the mix), if it exists. */
+/** The main window, if it's open. */
 export const getMainWindow = (): BrowserWindow | null => mainWindow;
 
+/** The tray window, if it's open (shown or not). */
+export const getTrayWindow = (): BrowserWindow | null => (trayWindow && !trayWindow.isDestroyed() ? trayWindow : null);
+
 export const showMainWindow = (): void => {
-    if (!mainWindow) return;
+    mainWindow ??= createMainWindow(true);
     if (mainWindow.isMinimized()) mainWindow.restore();
     mainWindow.show();
     mainWindow.focus();
     trayWindow?.hide();
+};
+
+/** Closes a main window opened only to hand over the page's old storage (store-file.ts), once it has. */
+export const closeHiddenMainWindow = (): void => {
+    if (mainWindow && handOverWindows.has(mainWindow)) mainWindow.destroy();
+};
+
+/** Like the Windows volume flyout: clicking anywhere else puts it away. */
+const hideOnBlur = (window: BrowserWindow): void =>
+    void window.on("blur", () => {
+        // Windows also sends blur to the window after it's hidden (when the taskbar is clicked);
+        // counting that one would swallow the next click on the tray icon.
+        if (isLinux || !window.isVisible()) return;
+        trayHiddenAt = Date.now();
+        window.hide();
+    });
+
+/** Alt+F4, Cmd+W or a Linux title bar's close hides it, like its own Close button; quitting closes it. */
+const hideOnClose = (window: BrowserWindow): void => {
+    window.on("close", (event) => {
+        if (isQuitting) return;
+        event.preventDefault();
+        window.hide();
+    });
+    window.on("closed", () => {
+        if (trayWindow === window) trayWindow = null;
+    });
+};
+
+/** Hidden a while, the tray window closes; shown again, it stays. */
+const closeWhenIdle = (window: BrowserWindow): void => {
+    window.on("hide", () => {
+        clearTimeout(trayCloseTimer);
+        trayCloseTimer = setTimeout(() => !window.isDestroyed() && !window.isVisible() && window.destroy(), trayKeepMs);
+    });
+    window.on("show", () => {
+        clearTimeout(trayCloseTimer);
+        onTrayShown();
+    });
 };
 
 const createTrayWindow = (): BrowserWindow => {
@@ -136,54 +203,16 @@ const createTrayWindow = (): BrowserWindow => {
         title: "Volt Mixer",
         backgroundColor: background(),
         ...(process.platform === "darwin" ? { type: "panel" } : {}),
-        webPreferences: webPreferences("tray-preload.js"),
+        webPreferences: webPreferences("tray-preload.cjs"),
     });
     lockNavigation(window);
     reloadAfterCrash(window);
     if (process.platform === "darwin") window.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
     hideOnBlur(window);
     hideOnClose(window);
-    tellVisibility(window, "tray:visible");
+    closeWhenIdle(window);
     void window.loadURL(`${appOrigin}/tray/`);
     return window;
-};
-
-/** Alt+F4, Cmd+W or a Linux title bar's close hides it, like its own Close button; quitting closes it. */
-const hideOnClose = (window: BrowserWindow): void => {
-    window.on("close", (event) => {
-        if (isQuitting) return;
-        event.preventDefault();
-        window.hide();
-    });
-    window.on("closed", () => {
-        if (trayWindow === window) trayWindow = null;
-    });
-};
-
-/** Like the Windows volume flyout: clicking anywhere else puts it away. */
-const hideOnBlur = (window: BrowserWindow): void =>
-    void window.on("blur", () => {
-        // Windows also sends blur to the window after it's hidden (when the taskbar is clicked);
-        // counting that one would swallow the next click on the tray icon.
-        if (isLinux || !window.isVisible()) return;
-        trayHiddenAt = Date.now();
-        window.hide();
-    });
-
-/*
- * Tells a window's page whether anyone can see it (the page can't tell: with background throttling
- * off, a hidden window still counts as visible). The tray asks for updates only while it's shown;
- * the main window draws its meters and views only while it's shown, so in the tray it idles.
- */
-const tellVisibility = (window: BrowserWindow, channel: string): void => {
-    const tell = (): void => {
-        if (!window.isDestroyed()) window.webContents.send(channel, window.isVisible() && !window.isMinimized());
-    };
-    window.on("show", tell);
-    window.on("hide", tell);
-    window.on("minimize", tell);
-    window.on("restore", tell);
-    window.webContents.on("did-finish-load", tell);
 };
 
 /** Above (or below) the tray icon, kept inside the screen's work area. */
@@ -198,35 +227,51 @@ const placeNear = (window: BrowserWindow, icon: Rectangle): void => {
     window.setPosition(x, Math.round(y));
 };
 
+let trayReady: (() => void) | null = null;
+
 /** Sizes the tray window to its content (in CSS px, from the page), within the screen. */
 export const fitTrayWindow = (height: number): void => {
     if (!trayWindow || !Number.isFinite(height)) return;
     const { workArea } = screen.getDisplayMatching(trayWindow.getBounds());
     const fitted = Math.round(Math.min(Math.max(height, 120), workArea.height - 16));
     const [width, current] = trayWindow.getContentSize() as [number, number];
-    if (fitted === current) return;
-    trayWindow.setContentSize(width, fitted);
+    if (fitted !== current) trayWindow.setContentSize(width, fitted);
     if (trayIcon) placeNear(trayWindow, trayIcon);
+    trayReady?.();
 };
 
-/** Made when the app starts and kept hidden, so it opens at once and already the right size. */
-export const prepareTrayWindow = (): void => {
-    trayWindow ??= createTrayWindow();
-};
-
-/**
- * The tray window's own Close button. A hidden window's later blur is ignored (the blur handler
- * checks it's visible), so the next click on the tray icon opens it again first time.
- */
+/** The tray window's own Close button. */
 export const hideTrayWindow = (): void => trayWindow?.hide();
 
+/** A new tray window: shown once its page has sized it, so it doesn't open at the wrong height. */
+const whenSized = (): Promise<void> =>
+    new Promise((resolve) => {
+        const done = (): void => {
+            clearTimeout(timer);
+            trayReady = null;
+            resolve();
+        };
+        const timer = setTimeout(done, trayReadyMs);
+        trayReady = done;
+    });
+
 /** Opens or closes the tray window. `icon` is where the tray icon is (none on Linux). */
-export const toggleTrayWindow = (icon?: Rectangle): void => {
+export const toggleTrayWindow = async (icon?: Rectangle): Promise<void> => {
+    const isNew = !trayWindow;
     trayWindow ??= createTrayWindow();
     // The click that blurred it shouldn't reopen it straight away.
     if (trayWindow.isVisible() || Date.now() - trayHiddenAt < 250) return trayWindow.hide();
     if (icon && icon.width > 0) trayIcon = icon;
+    if (isNew) await whenSized();
+    if (!trayWindow || trayWindow.isDestroyed()) return;
     if (trayIcon) placeNear(trayWindow, trayIcon);
     trayWindow.show();
     trayWindow.focus();
 };
+
+/**
+ * Windows tells only windows that it's shutting down, so a window that's never shown, with no
+ * page in it, hears it for the app (lifecycle.ts) while every other one is closed.
+ */
+export const createSessionWindow = (): BaseWindow =>
+    new BaseWindow({ show: false, skipTaskbar: true, width: 1, height: 1 });

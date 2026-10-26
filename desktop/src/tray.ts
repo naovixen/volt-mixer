@@ -1,8 +1,8 @@
 import { app, Menu, nativeImage, Tray } from "electron";
 import path from "path";
-import { applyLoginItem } from "./login";
-import { loadSettings, saveSettings } from "./settings";
-import { markQuitting, showMainWindow, toggleTrayWindow } from "./windows";
+import { applyLoginItem } from "./login.ts";
+import { loadSettings, saveSettings } from "./settings.ts";
+import { markQuitting, showMainWindow, toggleTrayWindow } from "./windows.ts";
 
 /*
  * The tray icon. A click opens the tray mixer (Windows and macOS); the menu has the rest. Linux
@@ -13,13 +13,13 @@ let tray: Tray | null = null;
 
 const iconPath = (): string => {
     const file = process.platform === "darwin" ? "trayTemplate.png" : "tray.png";
-    return path.join(app.isPackaged ? process.resourcesPath : path.join(__dirname, "..", "build"), file);
+    return path.join(app.isPackaged ? process.resourcesPath : path.join(app.getAppPath(), "build"), file);
 };
 
 const buildMenu = (): Menu =>
     Menu.buildFromTemplate([
         { label: "Open Volt Mixer", click: showMainWindow },
-        { label: "Mixer", click: () => toggleTrayWindow(tray?.getBounds()) },
+        { label: "Mixer", click: () => void toggleTrayWindow(tray?.getBounds()) },
         { type: "separator" },
         {
             label: "Start at login",
@@ -48,6 +48,6 @@ export const createTray = (): void => {
     tray = new Tray(image);
     tray.setToolTip("Volt Mixer");
     refreshTrayMenu();
-    if (process.platform !== "linux") tray.on("click", (_event, bounds) => toggleTrayWindow(bounds));
+    if (process.platform !== "linux") tray.on("click", (_event, bounds) => void toggleTrayWindow(bounds));
     if (process.platform === "darwin") tray.on("right-click", () => tray?.popUpContextMenu(buildMenu()));
 };

@@ -1,6 +1,6 @@
 import { app, net } from "electron";
-import { repositoryName, repositoryUrl } from "./app-info";
-import { isNewer } from "./versions";
+import { repositoryName, repositoryUrl } from "./app-info.ts";
+import { isNewer } from "./versions.ts";
 
 /*
  * Checks GitHub Releases for a newer version. Builds are unsigned, so there's no automatic

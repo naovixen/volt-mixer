@@ -7,9 +7,9 @@ import { setText } from "./dom.ts";
 import { cloneIcon } from "./icons.ts";
 import { loadTheme } from "./store.ts";
 import { applyTheme } from "./theme.ts";
-import type { ITraySnapshot, RemoteMessage } from "./remote.ts";
+import type { ITraySnapshot } from "../lib/engine/engine.ts";
 import { initSliders, setSliderDisabled, setSliderValue, useSliderSpec } from "./slider.ts";
-import { openTrayLink, type LinkStatus } from "./tray-link.ts";
+import { openTrayLink, type LinkStatus, type TrayMessage } from "./tray-link.ts";
 
 /*
  * The tray mixer (src/pages/tray), in the desktop app's tray window or on a phone. It never
@@ -18,22 +18,6 @@ import { openTrayLink, type LinkStatus } from "./tray-link.ts";
  */
 
 const link = openTrayLink();
-/**
- * This window's name in hello and bye, kept for the window's life (a reload keeps it), so a tray
- * that reloads is still the one that will say bye. Not crypto.randomUUID: a phone's plain-HTTP
- * page lacks it.
- */
-const trayId = ((): string => {
-    const key = "volt-mixer.tray-id";
-    const fresh = Math.random().toString(36).slice(2);
-    try {
-        const kept = sessionStorage.getItem(key) ?? fresh;
-        sessionStorage.setItem(key, kept);
-        return kept;
-    } catch {
-        return fresh;
-    }
-})();
 const list = (): HTMLElement => document.querySelector<HTMLElement>("[data-tray-rows]")!;
 const note = (): HTMLElement => document.querySelector<HTMLElement>("[data-tray-note]")!;
 let rows: ITrayRow[] = [];
@@ -41,8 +25,6 @@ let layoutKey = "";
 /** A value just moved here wins over a snapshot that may predate it. */
 const recentInputs = new Map<string, number>();
 const inputHoldMs = 400;
-
-const post = (message: RemoteMessage): void => link.send(message);
 
 let linkStatus: LinkStatus = "connected";
 let lastSnapshot: ITraySnapshot | null = null;
@@ -148,13 +130,13 @@ const onSlider = (event: Event): void => {
     const row = rowOf(event.target as Element);
     if (!row) return;
     recentInputs.set(row.key, performance.now());
-    post({ kind: "intent", intent: levelIntent(row, (event as CustomEvent<{ value: number }>).detail.value) });
+    link.sendIntent(levelIntent(row, (event as CustomEvent<{ value: number }>).detail.value));
 };
 
 const onClick = (event: Event): void => {
     const button = (event.target as Element).closest("[data-row-action]");
     const row = button && rowOf(button);
-    if (row) post({ kind: "intent", intent: muteIntent(row) });
+    if (row) link.sendIntent(muteIntent(row));
 };
 
 /** Escape hides the name tip under the pointer or focus; leaving the icon brings it back. */
@@ -170,8 +152,8 @@ const restoreTip = (event: PointerEvent | FocusEvent): void => {
     if (mute && !mute.contains(event.relatedTarget as Node | null)) mute.removeAttribute("data-tip-dismissed");
 };
 
-const onMessage = (message: Partial<RemoteMessage> | null): void => {
-    if (message?.kind === "snapshot" && message.snapshot) render(message.snapshot);
+const onMessage = (message: TrayMessage): void => {
+    if (message.kind === "snapshot") render(message.snapshot);
 };
 
 /**
@@ -217,17 +199,12 @@ export const startTray = (): void => {
     document.addEventListener("keydown", dismissTips);
     list().addEventListener("pointerout", restoreTip);
     list().addEventListener("focusout", restoreTip);
-    link.listen(onMessage, (status) => ((linkStatus = status), showNote()));
-    window.addEventListener("pagehide", () => post({ kind: "bye", id: trayId }));
-    // Back from the back/forward cache, the page says hello again, as when it first opened.
-    window.addEventListener("pageshow", (event) => event.persisted && post({ kind: "hello", id: trayId }));
     wireButtons();
     new ResizeObserver(fitWindow).observe(document.querySelector("[data-tray-content]")!);
     // The theme is chosen in the main window's Settings; follow it live.
     window.addEventListener("storage", (event) => event.key === "volt-mixer.theme" && applyTheme(loadTheme()));
-    // Hello now, so the window is sized while still hidden, then updates only while it's shown.
-    post({ kind: "hello", id: trayId });
-    trayApp()?.onTrayVisible((isVisible) => post({ kind: isVisible ? "hello" : "bye", id: trayId }));
+    // Asks for the rows now, so the window is sized before it's first shown.
+    link.listen(onMessage, (status) => ((linkStatus = status), showNote()));
     window.setTimeout(() => {
         isUnanswered = true;
         showNote();

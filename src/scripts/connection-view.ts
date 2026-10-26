@@ -1,11 +1,9 @@
 import type { IEngineSnapshot } from "../lib/engine/engine.ts";
 import type { IConnectionInfo } from "../lib/engine/ports.ts";
 import { setText } from "./dom.ts";
-import { viewSpec } from "./engine-client.ts";
+import { getEngine, viewSpec } from "./engine-client.ts";
 import { resetMeters } from "./meters-view.ts";
-import { notice } from "./notices.ts";
 import { useSliderSpec } from "./slider.ts";
-import * as volt from "./transport-webhid.ts";
 
 /* What the page shows about the connection: the status, the Connect buttons, and the Volt's details. */
 
@@ -38,13 +36,6 @@ export const renderConnection = (snapshot: IEngineSnapshot): void => {
 };
 
 export const connectionActions: Record<string, () => void> = {
-    connect: () =>
-        void volt
-            .pair()
-            .then(
-                (result) =>
-                    result === "cancelled" &&
-                    notice('No Volt was chosen. Click Connect Volt and pick "Volt 4 Gen 2".', { kind: "info" }),
-            ),
-    disconnect: () => void volt.disconnect(),
+    connect: () => getEngine().connect(),
+    disconnect: () => getEngine().disconnect(),
 };

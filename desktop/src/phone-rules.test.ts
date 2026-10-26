@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { homeAddresses, refusalFor } from "./phone-rules";
+import { homeAddresses, refusalFor } from "./phone-rules.ts";
 
 const served = "192.168.1.20:48190";
 const fromPhone = { host: served, origin: undefined, remoteIp: "192.168.1.31" };

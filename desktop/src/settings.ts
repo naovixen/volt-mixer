@@ -1,7 +1,7 @@
 import { app } from "electron";
 import fs from "fs";
 import path from "path";
-import { clean, defaults, type IDesktopSettings } from "./settings-rules";
+import { clean, defaults, type IDesktopSettings } from "./settings-rules.ts";
 
 export type { IDesktopSettings };
 

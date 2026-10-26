@@ -1,5 +1,5 @@
 import { protocol, type BrowserWindow, type IpcMainEvent, type IpcMainInvokeEvent } from "electron";
-import { csp, readSiteFile } from "./site-files";
+import { csp, readSiteFile } from "./site-files.ts";
 
 /*
  * The site is served from app://volt/, a secure origin (WebHID needs one) where the build's

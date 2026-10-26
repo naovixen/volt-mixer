@@ -1,6 +1,7 @@
-// Measures Volt Mixer's CPU and memory against a fake Volt (perf/fake-volt.js), so it never
-// reaches the real one: the website in headless Edge or Chrome, and the desktop app run from
-// source with a throwaway profile. Optionally samples the installed app as it is running now.
+// Measures Volt Mixer's CPU and memory against a pretend Volt, so it never reaches the real one:
+// the website in headless Edge or Chrome (perf/fake-volt.js in the page), and the desktop app run
+// from source with a throwaway profile (the fake in its main process, perf/desktop-run.mjs).
+// Optionally samples the installed app as it is running now.
 // Windows only (it reads Windows' process counters). Build first:
 //   pnpm build                    (the website, served here with astro preview)
 //   cd desktop && pnpm build      (the desktop app)
@@ -15,6 +16,7 @@ import { fileURLToPath } from "url";
 import { findBrowser, quietBrowserArgs } from "./lib/browser.mjs";
 import { closeBrowser, connect, evaluate, findTarget, wait } from "./lib/cdp.mjs";
 import { compareSamples, sampleProcesses } from "./perf/processes.mjs";
+import { withDesktop } from "./perf/desktop-run.mjs";
 import { dragFader, measure, waitForLive } from "./perf/scenarios.mjs";
 import { benchSerial, fakeVoltConfig, seededMix } from "./perf/volt-config.mjs";
 
@@ -104,48 +106,14 @@ const runWeb = async () => {
     }
 };
 
-/** The desktop app from source, with its own profile, so the installed app's data stays untouched. */
-const launchDesktop = (profile, port, extra = []) => {
-    const electron = path.join(desktopDir, "node_modules", "electron", "dist", "electron.exe");
-    // Covered by other windows, Windows would count it occluded and Chromium would stop drawing it.
-    const args = [
-        ".",
-        `--user-data-dir=${profile}`,
-        `--remote-debugging-port=${port}`,
-        "--disable-blink-features=WebHID",
-        "--disable-features=CalculateNativeWinOcclusion",
-    ];
-    return spawn(electron, [...args, ...extra], {
-        cwd: desktopDir,
-        stdio: "ignore",
-        env: { ...process.env, VOLT_FAKE_VOLT: "bench" },
-    });
-};
-
-const isMainPage = (target) =>
-    target.type === "page" && target.url.startsWith("app://volt/") && !target.url.includes("/tray/");
-
-const withDesktop = async (extra, settings, run) => {
-    const profile = fs.mkdtempSync(path.join(os.tmpdir(), "volt-bench-app-"));
-    fs.writeFileSync(path.join(profile, "settings.json"), JSON.stringify(settings));
-    const child = launchDesktop(profile, 9343, extra);
-    try {
-        const target = await findTarget(9343, isMainPage, child);
-        const cdp = await connect(target.webSocketDebuggerUrl);
-        await usePage(cdp, () => cdp.send("Page.reload"));
-        return await run(cdp, { root: child.pid });
-    } finally {
-        await closeBrowser(child, profile);
-    }
-};
-
+/** The desktop app from source, against its pretend Volt (perf/desktop-run.mjs). */
 const runDesktop = async () => {
-    const shown = await withDesktop([], {}, async (cdp, processes) => [
-        await measure({ cdp, processes }, "window open, idle", idleSeconds),
-        await measure({ cdp, processes }, "window open, drag", dragSeconds, dragFader(cdp, dragSeconds)),
+    const shown = await withDesktop(desktopDir, [], {}, async (cdp, processes, sent) => [
+        await measure({ cdp, processes, sent }, "window open, idle", idleSeconds),
+        await measure({ cdp, processes, sent }, "window open, drag", dragSeconds, dragFader(cdp, dragSeconds)),
     ]);
-    const tray = await withDesktop(["--hidden"], { loginStart: "tray" }, async (cdp, processes) => [
-        await measure({ cdp, processes }, "in the tray", idleSeconds),
+    const tray = await withDesktop(desktopDir, ["--hidden"], { loginStart: "tray" }, async (cdp, processes, sent) => [
+        await measure({ cdp, processes, sent }, "in the tray", idleSeconds),
     ]);
     return [...shown, ...tray];
 };

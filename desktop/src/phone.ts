@@ -1,11 +1,11 @@
 import type http from "http";
 import os from "os";
-import { homeAddresses, type IPhoneAddress } from "./phone-rules";
-import { closeServer, listenOn, phonePort } from "./phone-server";
-import { endStreams, streamCount, toStreams, watchStreamCount } from "./phone-streams";
-import { currentToken, rotateToken } from "./phone-token";
-import { loadSettings } from "./settings";
-import { getMainWindow } from "./windows";
+import { homeAddresses, type IPhoneAddress } from "./phone-rules.ts";
+import { closeServer, listenOn, phonePort } from "./phone-server.ts";
+import { endStreams, streamCount, toStreams, watchStreamCount } from "./phone-streams.ts";
+import { currentToken, rotateToken } from "./phone-token.ts";
+import { loadSettings } from "./settings.ts";
+import { getMainWindow } from "./windows.ts";
 
 /*
  * The phone remote: the tray page served on the home network while Settings › Desktop app ›
@@ -39,17 +39,27 @@ export const phoneInfo = () => ({
     phones: streamCount(),
 });
 
-/** The main window hears the remote's state when it changes, and publishes to phones only while some are in. */
+/** The main window hears the remote's state when it changes. A phone that connects is sent what the tray shows. */
 const tellPage = (): void => {
     const info = phoneInfo();
     const told = JSON.stringify(info);
     if (told === lastTold) return;
     lastTold = told;
     getMainWindow()?.webContents.send("phone:status", info);
-    getMainWindow()?.webContents.send("phone:count", info.phones);
 };
 
-watchStreamCount(tellPage);
+let onPhoneJoined = (): void => {};
+
+export const whenPhoneJoins = (listen: () => void): void => {
+    onPhoneJoined = listen;
+};
+
+let phonesBefore = 0;
+watchStreamCount((count) => {
+    if (count > phonesBefore) onPhoneJoined();
+    phonesBefore = count;
+    tellPage();
+});
 
 /** Tells the main window again, as its page has (re)loaded and knows nothing yet. */
 export const tellPhoneStatus = (): void => {
