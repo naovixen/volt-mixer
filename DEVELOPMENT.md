@@ -538,7 +538,10 @@ Only Windows has been tried with a Volt so far; reports from macOS and Linux are
 For maintainers: bump `desktop/package.json`'s version, then push a matching `v*` tag (the
 release fails if they differ). `.github/workflows/release.yml` builds every system's installer
 with read-only access, then a separate job attaches them to the tag's draft release, to be checked
-and published by hand. A manual run of the workflow only builds, and keeps the installers as
+and published by hand. The draft's notes are written from the Conventional Commits since the
+previous tag (`.github/scripts/release-notes.mjs`): `feat`, `fix`, `perf` and anything marked
+breaking, so a commit's subject is what users read; edit them in the draft before publishing. Try
+them first with `node .github/scripts/release-notes.mjs HEAD`. A manual run of the workflow only builds, and keeps the installers as
 artefacts. Every action in both workflows is pinned to a commit: when you update one, look up the
 new release's commit and keep the `# vX.Y.Z` comment beside it. The website deploys from `main`
 through `.github/workflows/deploy.yml`.

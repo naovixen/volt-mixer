@@ -1,6 +1,7 @@
 # Builds the desktop app on each system when a v* tag is pushed, then attaches the installers to
-# the tag's draft GitHub Release. Publish the draft by hand once it's been tried. Builds are
-# unsigned. The builds can only read the repository; only the last job, which runs no project
+# the tag's draft GitHub Release, with notes written from the commits since the last tag. Read
+# and edit the notes, then publish the draft by hand once it's been tried. Builds are unsigned.
+# The builds and the notes can only read the repository; only the last job, which runs no project
 # code, can write to releases. Actions are pinned to a commit; the comment says which release.
 name: Release
 
@@ -58,11 +59,30 @@ jobs:
             desktop/release/*.deb
           if-no-files-found: error
 
+  # The draft's notes, from the Conventional Commits since the previous v* tag (it needs the
+  # whole history and the tags to find them).
+  notes:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - run: node .github/scripts/release-notes.mjs "$GITHUB_REF_NAME" > release-notes.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+
   # A tag's installers go to its draft release, named for the version (as electron-builder did).
+  # The notes are only used when the draft is made, so a re-run keeps any edits to them.
   # A manual run stops at the build, and keeps the files as artefacts.
   publish:
     if: github.event_name == 'push'
-    needs: build
+    needs: [build, notes]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -70,8 +90,13 @@ jobs:
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
+          pattern: volt-mixer-*
           path: release
           merge-multiple: true
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+          path: notes
       - name: Attach the installers to the draft release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,7 +105,7 @@ jobs:
         run: |
           is_draft="$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null || echo none)"
           if [ "$is_draft" = none ]; then
-            gh release create "$TAG" --draft --verify-tag --title "${TAG#v}"
+            gh release create "$TAG" --draft --verify-tag --title "${TAG#v}" --notes-file notes/release-notes.md
           elif [ "$is_draft" = false ]; then
             echo "::error::$TAG is already published; its files are left as they are."
             exit 1
