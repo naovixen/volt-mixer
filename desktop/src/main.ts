@@ -70,6 +70,9 @@ const start = (): void => {
 if (!app.requestSingleInstanceLock()) {
     app.quit();
 } else {
+    // Drawing in software: a mixer page needs no GPU, and without a GPU process the app takes about
+    // 40% less memory in the tray and less CPU in a drag, the same idle (docs/performance.md).
+    app.disableHardwareAcceleration();
     registerAppScheme();
     app.on("second-instance", showMainWindow);
     // The app lives in the tray with no window open; closing the last one doesn't quit it (windows.ts).

@@ -80,6 +80,7 @@ run, so the page's own work and the writes are the steadier columns.
 | 1: engine, send pump, meter frames  | 43.9, 39.3                     | 253.4, 130.2, 70.1                           | 32.3                | 49.1, 70.2                             | 5, 115, 236                                              |
 | 2: views draw only what changed     | 26.5, 33.0                     | 226.3, 118.5, 70.2                           | 30.7                | 50.4, 70.6                             | 5, 112, 234                                              |
 | 3: engine in the app's main process | 26.8, 33.6                     | 240.0, 125.5, 70.6                           | 18.0                | 58.3, 48.0                             | 4, 62, 130                                               |
+| 4: app draws in software            | 28.8, 31.3                     | 193.0, 126.9, 71.8                           | 19.1                | 33.8, 50.2                             | 4, 54, 82                                                |
 
 What's left in a drag is the browser drawing a frame for every screen refresh while the handle
 moves, which it should. A trace of a 3 s drag at 240 Hz shows only three style changes a frame
@@ -87,3 +88,20 @@ moves, which it should. A trace of a 3 s drag at 240 Hz shows only three style c
 readout's new text. The layout count stays high because text has to be laid out, but each pass is
 small (9 ms a second in all). The meter covers keep `will-change: transform`: without it, painting
 doubled (12 to 22 ms a second) and layerising didn't get cheaper.
+
+## Before and after
+
+| scenario               | before: private set / bytes MB, CPU % machine | after: private set / bytes MB, CPU % machine |
+| ---------------------- | --------------------------------------------- | -------------------------------------------- |
+| app in the tray        | 117 / 245, 0.12 (5 processes)                 | 54 / 82, 0.07 (4 processes)                  |
+| app window open, idle  | 157 / 274, 2.07                               | 93 / 155, 0.50                               |
+| app window open, drag  | 195 / 327, 11.04 (254 writes a second)        | 131 / 193, 4.22 (50 writes a second)         |
+| website, idle          | 217 / 328, 1.92                               | 173 / 284, 2.08                              |
+| website, drag (240 Hz) | 241 / 351, 9.90 (276 writes a second)         | 188 / 303, 8.60 (72 writes a second)         |
+
+The website's own page work halved idle (51 to 29 ms a second) and a drag sends a quarter of the
+writes; its process CPU is mostly the browser drawing a 240 Hz screen, which a page can't change.
+
+The app draws in software (`app.disableHardwareAcceleration()` in `desktop/src/main.ts`). Measured
+both ways after phase 3: idle CPU was the same (0.94% and 1.02%), while software drawing took less
+memory everywhere (in the tray 133 to 81 MB private bytes) and about a third less CPU in a drag.

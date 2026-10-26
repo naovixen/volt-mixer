@@ -111,6 +111,8 @@ after a couple of minutes hidden.
 - The page used to keep this computer's mix in its storage. The page hands it to main the first
   time (only what main doesn't have yet), and on a first start in the tray the window opens hidden
   for that alone.
+- The app draws in software (`app.disableHardwareAcceleration()`): a mixer page needs no GPU, and
+  without a GPU process it takes less memory and less CPU in a drag (`docs/performance.md`).
 - The site is served from `app://volt/`, a secure origin where its root-absolute URLs resolve, with
   a strict CSP (`script-src 'self'`; `public/theme.js` is a file for that reason). No page gets
   WebHID or any other device.
