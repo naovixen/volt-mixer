@@ -1,7 +1,7 @@
 {
     "name": "volt-mixer-desktop",
     "productName": "Volt Mixer",
-    "version": "0.7.1",
+    "version": "0.7.2",
     "description": "Volt Mixer as a desktop app: the Volt 4 Gen 2's mixer in a window and the system tray.",
     "license": "MIT",
     "author": "Naomi",
