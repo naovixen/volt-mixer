@@ -66,3 +66,13 @@ What these show:
   every meter report, with a style recalculation each time.
 - **In the tray:** the app keeps five processes and about 245 MB of private bytes, two of them
   renderers for windows no one can see.
+
+## After each phase
+
+The same scenarios. CPU in headless runs moves by about a percent of the machine from run to
+run, so the page's own work and the writes are the steadier columns.
+
+| phase                              | web idle: page ms/s, recalcs/s | web drag: page ms/s, layouts/s, HID writes/s | app idle: page ms/s | app drag: CPU % one core, HID writes/s | app in tray: processes, private set MB, private bytes MB |
+| ---------------------------------- | ------------------------------ | -------------------------------------------- | ------------------- | -------------------------------------- | -------------------------------------------------------- |
+| baseline                           | 51.0, 52.5                     | 300.3, 137.2, 275.5                          | 57.0                | 88.3, 254.2                            | 5, 117, 245                                              |
+| 1: engine, send pump, meter frames | 43.9, 39.3                     | 253.4, 130.2, 70.1                           | 32.3                | 49.1, 70.2                             | 5, 115, 236                                              |

@@ -1,11 +1,12 @@
+import type { IMeterFrame } from "../lib/engine/meters.ts";
 import { clipDb, meterFill, peakFallDbPerSecond } from "../lib/meters.ts";
 
 /*
- * Draws the meters from the Volt's 50-per-second meter reports, with a falling peak and clip hold.
- * At most one frame per report, never one per screen refresh (a 240 Hz screen would draw five times
- * as often for nothing), and none at all once every meter has settled: the Volt sends reports in
- * silence too. Each meter is written only when it changes, and nothing is drawn while no one can
- * see the page (volt-session.ts).
+ * Draws the meters from the engine's meter frames (at most 30 a second, each the highest peak
+ * since the last), with a falling peak and clip hold. At most one draw per frame, never one per
+ * screen refresh, and none at all once every meter has settled: the Volt sends reports in silence
+ * too. Each meter is written only when it changes, and nothing is drawn while no one can see the
+ * page (the engine doesn't even read the reports then).
  */
 
 const clipHoldMs = 2000;
@@ -48,15 +49,16 @@ const draw = (now: number): void => {
     fallPeaks(now);
 };
 
-/** New peak levels in dBFS, by meter name: drawn in the next frame, if anything is (or was) lit. */
-export const showMeterLevels = (levels: Record<string, number>): void => {
+/** New peak levels: drawn in the next frame, if anything is (or was) lit. */
+export const showMeterLevels = ({ names, levels }: IMeterFrame): void => {
     const now = performance.now();
     let hasLevel = isLit;
-    for (const [name, db] of Object.entries(levels)) {
+    names.forEach((name, i) => {
+        const db = levels[i] ?? -Infinity;
         if (db > (shown.get(name) ?? -Infinity)) shown.set(name, db);
         if (db >= clipDb) clippedUntil.set(name, now + clipHoldMs);
         if (meterFill(db) > 0) hasLevel = true;
-    }
+    });
     if (hasLevel) frame ||= requestAnimationFrame(draw);
 };
 

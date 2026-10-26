@@ -1,7 +1,7 @@
-import { app } from "./app-state.ts";
 import { clearFeedback, flashButton, setInvalid } from "./button-feedback.ts";
+import { snap } from "./engine-client.ts";
 import { clearMessage, showMessage } from "./messages.ts";
-import type { LinkReceiver } from "./mix-ownership.ts";
+import type { LinkReceiver } from "./mix-address.ts";
 
 /*
  * The paste-a-mix-link boxes (Settings › Your mix, and the setup panel). What a link does depends
@@ -16,7 +16,7 @@ import type { LinkReceiver } from "./mix-ownership.ts";
 const usePastedLink = (form: HTMLFormElement, receive: LinkReceiver): void => {
     const input = form.querySelector<HTMLInputElement>("[data-mix-link-input]")!;
     const question = "Replace this computer's mix with the one in the link?";
-    if (app.state.isMixOwned && !window.confirm(question)) return;
+    if (snap().state.isMixOwned && !window.confirm(question)) return;
     const { kind, text } = receive(input.value);
     const isError = kind === "error";
     setInvalid(input, isError);

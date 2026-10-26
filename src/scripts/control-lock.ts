@@ -1,31 +1,13 @@
-import { app, hooks } from "./app-state.ts";
-import { setCondition } from "./notices.ts";
-import { restartMixPause, takeMixWhenFree } from "./mix-pause.ts";
-import * as volt from "./volt-connection.ts";
+import { getEngine } from "./engine-client.ts";
 
 /* Only one tab or window of the site drives the Volt; any other stays read-only and waits its turn. */
 
 const lockName = "volt-mixer-control";
-const otherTabText = "Volt Mixer is open in another tab or window. Use that one; this one takes over when it closes.";
 
-/**
- * This tab drives the Volt from now on. Taking over from another tab, it listens for another Volt
- * Mixer first (a tab without control hears nothing of one), then applies the saved mix.
- */
+/** This tab drives the Volt from now on, until it closes (the lock is held for good). */
 const takeControl = (): Promise<void> => {
-    app.hasControl = true;
-    setCondition("other-tab", null);
-    restartMixPause(volt.connectedSpec() !== null);
-    if (volt.connectedSpec() && app.isHardwareKnown) takeMixWhenFree();
-    hooks.refresh();
-    // Held until the tab closes.
+    getEngine().setControl(true);
     return new Promise<void>(() => {});
-};
-
-const waitForControl = (): void => {
-    app.hasControl = false;
-    setCondition("other-tab", otherTabText, { kind: "info" });
-    hooks.refresh();
 };
 
 /**
@@ -38,7 +20,7 @@ export const holdControlLock = (): Promise<void> =>
         if (!locks) return void (takeControl(), decided());
         void locks.request(lockName, { ifAvailable: true }, (lock) => {
             if (!lock) {
-                waitForControl();
+                getEngine().setControl(false);
                 void locks.request(lockName, takeControl);
             }
             decided();

@@ -9,24 +9,24 @@ import { desktopApp } from "./desktop.ts";
  */
 
 let isWindowShown = true;
-const whenShown = new Set<() => void>();
+const listeners = new Set<(isShown: boolean) => void>();
 
 export const isPageShown = (): boolean => (desktopApp() ? isWindowShown : document.visibilityState === "visible");
 
-/** `listen` runs each time the page is shown again, to bring what it shows up to date. */
-export const onPageShown = (listen: () => void): void => void whenShown.add(listen);
+/** `listen` runs each time the page is shown or hidden. */
+export const onPageVisibility = (listen: (isShown: boolean) => void): void => void listeners.add(listen);
 
-const shown = (): void => whenShown.forEach((listen) => listen());
+const tell = (isShown: boolean): void => listeners.forEach((listen) => listen(isShown));
 
 export const wirePageVisibility = (): void => {
     const desktop = desktopApp();
     if (!desktop) {
-        document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && shown());
+        document.addEventListener("visibilitychange", () => tell(document.visibilityState === "visible"));
         return;
     }
     desktop.onWindowVisible((isVisible) => {
         const wasShown = isWindowShown;
         isWindowShown = isVisible;
-        if (isVisible && !wasShown) shown();
+        if (isVisible !== wasShown) tell(isVisible);
     });
 };

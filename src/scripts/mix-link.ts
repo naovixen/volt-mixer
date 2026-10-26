@@ -1,8 +1,8 @@
 import { encodeMixCode } from "../lib/mix-code.ts";
 import { toSavedMix, type ISavedMix } from "../lib/saved-mix.ts";
 import { site } from "../lib/site.ts";
-import { app } from "./app-state.ts";
 import { desktopApp } from "./desktop.ts";
+import { snap } from "./engine-client.ts";
 import { drawQr } from "./qr.ts";
 import { flashButton, setInvalid } from "./button-feedback.ts";
 import { showMessage } from "./messages.ts";
@@ -10,7 +10,7 @@ import { showMessage } from "./messages.ts";
 /* Settings › Your mix › Mix link: the link in a box that copies itself, and its QR code below. */
 
 /** The mix as a link to the website. In the desktop app the page is app://volt/, which opens nowhere else. */
-export const mixLink = (mix: ISavedMix = toSavedMix(app.state)): string => {
+export const mixLink = (mix: ISavedMix = toSavedMix(snap().state)): string => {
     const url = desktopApp() ? new URL(site.websiteUrl) : new URL(import.meta.env.BASE_URL, location.origin);
     url.hash = `m=${encodeMixCode(mix)}`;
     return url.href;
@@ -26,7 +26,7 @@ let shownMix = "";
 export const refreshMixLink = (): void => {
     const input = box();
     if (!input?.closest("dialog")?.open) return;
-    const mix = toSavedMix(app.state);
+    const mix = toSavedMix(snap().state);
     const text = JSON.stringify(mix);
     if (text === shownMix && input.value) return;
     shownMix = text;

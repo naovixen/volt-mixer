@@ -1,5 +1,5 @@
+import type { IEngineStore } from "../lib/engine/ports.ts";
 import type { IStripView } from "../lib/strip-groups.ts";
-import type { ISavedMix } from "../lib/saved-mix.ts";
 import { isTheme, type Theme } from "./theme.ts";
 
 /*
@@ -43,10 +43,8 @@ export const loadMix = (serial: string): unknown => {
     return isDated ? (saved as { mix: unknown }).mix : saved;
 };
 
-/** Saves the mix if it differs from what's saved; null forgets it. */
-export const saveMix = (serial: string, mix: ISavedMix | null): void => {
-    if (mix === null || JSON.stringify(loadMix(serial)) !== JSON.stringify(mix)) write(mixKey(serial), mix);
-};
+/** Saves the mix (the engine saves only when it changed); null forgets it. */
+export const saveMix = (serial: string, mix: unknown): void => write(mixKey(serial), mix);
 
 /** A mix opened from a link before the Volt connected; applied once it does. */
 export const loadPendingMix = (): unknown => read(pendingKey);
@@ -94,3 +92,13 @@ export const loadBrightness = (serial: string): number | null => {
 export const saveBrightness = (serial: string, raw: number): void => write(brightnessKey(serial), raw);
 
 export const clearRetiredSettings = (): void => retiredKeys.forEach((key) => write(key, null));
+
+/** What the engine keeps, in this browser's storage. */
+export const engineStore: IEngineStore = {
+    loadMix,
+    saveMix,
+    loadPendingMix,
+    savePendingMix,
+    loadBrightness,
+    saveBrightness,
+};

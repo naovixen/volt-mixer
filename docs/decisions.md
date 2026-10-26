@@ -91,7 +91,7 @@ stylesheets in `src/styles` are unscoped anyway, so they nest freely.
 
 `desktop/` wraps the same site in Electron for home computers that want it without a browser,
 with a tray mixer. Electron ships Chromium, so WebHID works the same on Windows, macOS and Linux
-and the page's own connection code (`src/scripts/volt-connection.ts`) runs unchanged; main only
+and the page's own connection code (`src/scripts/transport-webhid.ts`) runs unchanged; main only
 grants the permission Chrome would ask for. A smaller shell (Tauri) uses the system web view, which
 has no WebHID on macOS or Linux, so the USB part would have to be rewritten natively.
 
@@ -141,7 +141,7 @@ show levels the Volt isn't playing. They can't talk, but every program with the 
 receives every state reading, and each re-reads every 1.5 s, so readings a page didn't ask for
 mean another one is open (`src/lib/other-program.ts`). The desktop app keeps its mix and says the
 browser is open; the website pauses its mix until the other one closes, and listens for 3.5 s
-after connecting before it applies its own (`src/scripts/mix-pause.ts`). Two browsers both pause
+after connecting before it applies its own (`src/lib/engine/ownership.ts`). Two browsers both pause
 and say so. UAD Console doesn't re-read, so it isn't noticed.
 
 ## Every change is an intent
@@ -169,7 +169,7 @@ Volt Mixer open). Owning the mix means nothing holds it back: a mix taken while 
 for later (`takeOwnership`), so nothing this page sends can fight the other Volt Mixer.
 
 A solo on a strip that isn't shown silences the rest of the monitor mix with no button in sight,
-so it's a condition too, with Clear the solo (`src/scripts/hidden-solo.ts`). The page never ends
+so it's a condition too, with Clear the solo (`showHiddenSolos` in `src/lib/engine/engine.ts`). The page never ends
 a solo itself, on hiding a strip or switching the digital format: that would turn every other
 channel back up.
 

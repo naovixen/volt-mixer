@@ -4,7 +4,7 @@ import { toHex } from "./commands.ts";
 import type { IReport } from "./commands.ts";
 import { applyHardwareState, defaultState, routeSources, setLinked } from "./mixer.ts";
 import type { IMixerState } from "./mixer.ts";
-import { createMixerSync, reportedSettings } from "./mixer-sync.ts";
+import { createMixerSync, reportedSettings } from "./engine/sync.ts";
 import { parseState } from "./reports.ts";
 import { specFor } from "./spec.ts";
 

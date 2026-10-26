@@ -4,7 +4,7 @@ import { readSiteJson } from "./site-files";
 import { parseVoltHid, type IVoltHid } from "./volt-hid";
 
 /*
- * WebHID in the app. The page's own code (src/scripts/volt-connection.ts) talks to the Volt as it
+ * WebHID in the app. The page's own code (src/scripts/transport-webhid.ts) talks to the Volt as it
  * does in a browser; these handlers stand in for Chrome's permission prompts. The Volt is allowed
  * without asking, so it connects at startup. Main can't see HID collections, so the page still
  * checks for the Volt's control interface itself. Which Volts are allowed comes from src/data,

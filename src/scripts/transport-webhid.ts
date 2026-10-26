@@ -1,28 +1,26 @@
-import { identify, stateRequest } from "../lib/commands.ts";
+import { identify } from "../lib/commands.ts";
 import type { IReport } from "../lib/commands.ts";
+import type { IConnectionInfo } from "../lib/engine/ports.ts";
 import { parseIdentify } from "../lib/reports.ts";
 import { modelName, newestSpec, protocol, specFor } from "../lib/spec.ts";
 import type { ISpec } from "../lib/spec.ts";
 
 /*
- * The page's one link to the Volt over WebHID. Everything the controller needs is exported here,
- * so a desktop app could swap in a native HID bridge with the same functions and events.
+ * The website's link to the Volt over WebHID: finding it, opening and identifying it, and noticing
+ * it's gone. What's said to it and what it says back are the engine's (src/lib/engine).
  */
 
-export interface IConnectionInfo {
-    version: string;
-    serial: string;
-    specVersion: string;
-    isExact: boolean;
-    isIdentified: boolean;
+/** What the connection tells the engine (host-web.ts wires them up). */
+export interface ITransportEvents {
+    connected: (info: IConnectionInfo, spec: ISpec) => void;
+    disconnected: (isByUser: boolean) => void;
+    report: (reportId: number, data: Uint8Array) => void;
+    error: (message: string) => void;
 }
 
-/** "connected" (IConnectionInfo), "disconnected", "report" ({ reportId, data }) and "error" ({ message }). */
-export const connectionEvents = new EventTarget();
-
+let events: ITransportEvents = { connected: () => {}, disconnected: () => {}, report: () => {}, error: () => {} };
 /** The connected Volt: set only once it has identified itself, so no report is handled before. */
 let device: HIDDevice | null = null;
-let currentSpec: ISpec | null = null;
 /** Adopts run one after another, so connect events, reconnect() and pair() can't open a device twice. */
 let adopting: Promise<boolean> = Promise.resolve(false);
 /** Set by disconnect(): the page stays disconnected (no automatic reconnect) until pair(). */
@@ -30,14 +28,11 @@ let isHeldOff = false;
 /** Each device's own queue, so a slow send to one never holds up another. */
 const queues = new WeakMap<HIDDevice, Promise<void>>();
 
-const emit = (type: string, detail?: unknown): boolean =>
-    connectionEvents.dispatchEvent(new CustomEvent(type, { detail }));
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const bytesOf = (event: HIDInputReportEvent): Uint8Array =>
     new Uint8Array(event.data.buffer, event.data.byteOffset, event.data.byteLength);
 
 export const isWebHidSupported = (): boolean => "hid" in navigator;
-export const connectedSpec = (): ISpec | null => (device ? currentSpec : null);
 
 const declaresCommandReport = (collection: HIDCollectionInfo): boolean =>
     (collection.outputReports ?? []).some((report) => report.reportId === newestSpec().reports.command.id) ||
@@ -50,7 +45,7 @@ const isVoltControl = (candidate: HIDDevice): boolean =>
     candidate.collections.some((c) => c.usagePage === protocol.controlUsagePage && declaresCommandReport(c));
 
 const onInput = (event: HIDInputReportEvent): void => {
-    if (event.device === device) emit("report", { reportId: event.reportId, data: bytesOf(event) });
+    if (event.device === device) events.report(event.reportId, bytesOf(event));
 };
 
 /** Sends to `target` while it's the device being identified or the one connected. */
@@ -70,22 +65,18 @@ const sendNow = async (target: HIDDevice, reports: IReport[], isCurrent: () => b
     }
 };
 
-const enqueue = (target: HIDDevice, reports: IReport[], isCurrent: () => boolean): void => {
-    if (reports.length === 0) return;
-    queues.set(
-        target,
-        (queues.get(target) ?? Promise.resolve()).then(() => sendNow(target, reports, isCurrent)),
-    );
+/** Queues `reports` behind what's already waiting; resolves once they're written or dropped. */
+const enqueue = (target: HIDDevice, reports: IReport[], isCurrent: () => boolean): Promise<void> => {
+    if (reports.length === 0) return Promise.resolve();
+    const written = (queues.get(target) ?? Promise.resolve()).then(() => sendNow(target, reports, isCurrent));
+    queues.set(target, written);
+    return written;
 };
 
 /** Sends in order, bound to the device connected when queued, so nothing crosses a KVM switch. */
-export const send = (reports: IReport[]): void => {
+export const send = (reports: IReport[]): Promise<void> => {
     const target = device;
-    if (target) enqueue(target, reports, () => device === target);
-};
-
-export const requestState = (): void => {
-    if (currentSpec) send([stateRequest(currentSpec)]);
+    return target ? enqueue(target, reports, () => device === target) : Promise.resolve();
 };
 
 /** Sends one report to `target` and resolves with the first input report whose ID matches, or null. */
@@ -100,23 +91,23 @@ const request = (target: HIDDevice, report: IReport, reportId: number, timeoutMs
             void (event.reportId === reportId && finish(bytesOf(event)));
         const timer = setTimeout(() => finish(null), timeoutMs);
         target.addEventListener("inputreport", onReport);
-        enqueue(target, [report], () => target.opened);
+        void enqueue(target, [report], () => target.opened);
     });
 
-const identifyDevice = async (candidate: HIDDevice): Promise<IConnectionInfo> => {
+const identifyDevice = async (candidate: HIDDevice): Promise<{ info: IConnectionInfo; spec: ISpec }> => {
     const spec = newestSpec();
     const reply = await request(candidate, identify(spec), spec.reports.identifyReply.id, 1500);
     const identity = reply ? parseIdentify(reply) : null;
     const isIdentified = identity?.vendorId === protocol.vendorId && identity.productId === protocol.productId;
     const choice = specFor(isIdentified ? identity.version : "");
-    currentSpec = choice.spec;
-    return {
+    const info = {
         version: isIdentified ? identity.version : "unknown",
         serial: isIdentified ? identity.serial : "",
         specVersion: choice.version,
         isExact: isIdentified && choice.isExact,
         isIdentified,
     };
+    return { info, spec: choice.spec };
 };
 
 /** Right after a KVM switch the device can be briefly not ready, so opening retries a few times. */
@@ -138,17 +129,15 @@ const doAdopt = async (candidate: HIDDevice): Promise<boolean> => {
     if (device || isHeldOff) return false;
     const openError = await openWithRetry(candidate);
     if (openError) {
-        emit("error", {
-            message: `Couldn't open the Volt (${openError.message}). Unplug it and plug it back in, then try again.`,
-        });
+        events.error(`Couldn't open the Volt (${openError.message}). Unplug it and plug it back in, then try again.`);
         return false;
     }
-    const info = await identifyDevice(candidate);
+    const { info, spec } = await identifyDevice(candidate);
     if (!candidate.opened || isHeldOff) return false;
     device = candidate;
     candidate.addEventListener("inputreport", onInput);
-    emit("connected", info);
-    requestState();
+    // The engine asks for the Volt's state itself, straight away.
+    events.connected(info, spec);
     return true;
 };
 
@@ -164,8 +153,7 @@ const drop = (): void => {
     if (!device) return;
     device.removeEventListener("inputreport", onInput);
     device = null;
-    currentSpec = null;
-    emit("disconnected", { isByUser: isHeldOff });
+    events.disconnected(isHeldOff);
 };
 
 /** Reconnects to a Volt this site was given before, without a prompt (page load, KVM switch back). */
@@ -181,9 +169,7 @@ const explainUnsupported = (picked: HIDDevice[]): void => {
     const other = picked.find((candidate) => candidate.productId !== protocol.productId);
     if (!other) return;
     const name = modelName(other.productId);
-    emit("error", {
-        message: `${name} isn't supported yet: only the ${modelName(protocol.productId)} has been decoded.`,
-    });
+    events.error(`${name} isn't supported yet: only the ${modelName(protocol.productId)} has been decoded.`);
 };
 
 /** The browser's device picker; lists every UA device so another model can be named. Needs a user gesture. */
@@ -205,7 +191,9 @@ export const disconnect = async (): Promise<void> => {
     await current.close().catch(() => undefined);
 };
 
-export const watchDevices = (): void => {
+/** Starts following Volts being plugged in and out, telling `listen`. */
+export const watchDevices = (listen: ITransportEvents): void => {
+    events = listen;
     navigator.hid.addEventListener("connect", (event) => void adopt(event.device));
     navigator.hid.addEventListener("disconnect", (event) => event.device === device && drop());
 };

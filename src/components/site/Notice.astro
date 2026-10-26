@@ -6,7 +6,7 @@ const messageIcons = ["circle-check", "info", "triangle-alert", "circle-x"];
 
 <!--
     Messages about the whole page, one box each: always in the page, empty when idle, so a new one
-    is announced (polite here; notice() in src/scripts/app-state.ts gives an urgent one role="alert").
+    is announced (polite here; notice() in src/scripts/notices.ts gives an urgent one role="alert").
     Each box is a .message-box.notice-item[data-notice-item] holding its .message.notice-text, an
     optional action button and a Dismiss button cloned from #notice-dismiss; its kind's icon comes
     from #message-icons.

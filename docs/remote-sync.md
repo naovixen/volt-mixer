@@ -18,8 +18,8 @@ what the Volt is really doing, and none of this needs syncing.
 ## What doesn't
 
 The Volt can't report its mix: fader, pan and cue-send levels (crosspoints) and cue routing. Like
-UAD Console, each computer keeps its own copy and pushes it on connect (`volt-session.ts`
-`onFirstState` → `mix-ownership.ts` `takeOwnership`). So:
+UAD Console, each computer keeps its own copy and pushes it on connect (`src/lib/engine/session.ts`
+`onFirstState` → `src/lib/engine/ownership.ts` `takeOwnership`). So:
 
 1. At home you pull Line 3/4 down by 10 dB.
 2. The KVM switches to the work laptop. Its page connects and pushes its own, older mix.

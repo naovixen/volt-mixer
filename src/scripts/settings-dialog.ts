@@ -1,11 +1,12 @@
 import { isRouteKnown } from "../lib/commands.ts";
 import type { Intent } from "../lib/intents.ts";
 import { cueNames, type CueName } from "../lib/mixer.ts";
-import { app, currentSpec, hooks, layout } from "./app-state.ts";
+import { getEngine, snap, viewSpec } from "./engine-client.ts";
+import { requestRender } from "./render-loop.ts";
 import { runPageIntent } from "./run-intent.ts";
 import { setSliderValue } from "./slider.ts";
 import { saveTheme, saveView } from "./store.ts";
-import { applyTheme, isTheme } from "./theme.ts";
+import { applyTheme, currentTheme, isTheme } from "./theme.ts";
 import { refreshMixLink, wireMixLink } from "./mix-link.ts";
 import { wireDesktopSettings } from "./desktop-settings.ts";
 
@@ -22,13 +23,13 @@ const check = (setting: string, value: string | boolean): void => {
     }
 };
 
-const mirroredCue = (): string => cueNames.find((cue) => app.state.cues[cue].isMirroredToLine34) ?? "none";
+const mirroredCue = (): string => cueNames.find((cue) => snap().state.cues[cue].isMirroredToLine34) ?? "none";
 
 /** "Own mix" can only be chosen once that cue's route is captured (src/data/volt4-gen2.json). */
 const markUncapturedRoutes = (): void => {
     for (const cue of cueNames) {
         const own = dialog().querySelector<HTMLOptionElement>(`[data-setting="${cue}-source"] option[value="own"]`);
-        if (own) own.disabled = !isRouteKnown(currentSpec(), `${cue}Mix`);
+        if (own) own.disabled = !isRouteKnown(viewSpec(), `${cue}Mix`);
     }
 };
 
@@ -40,15 +41,15 @@ const viewSettings: Record<string, "isDigitalShown" | "isLoopbackShown"> = {
 
 /** Updates the dialog's values from state; device settings need the Volt, the view doesn't. */
 export const refreshSettings = (isLive: boolean): void => {
-    const { device, cues: cueRouting, headphoneSource, isMixOwned } = app.state;
+    const { device, cues: cueRouting, headphoneSource, isMixOwned } = snap().state;
     check("clip", device.isClipProtected);
     check("digital", device.digitalFormat);
     check("headphone-source", headphoneSource);
     for (const cue of cueNames) check(`${cue}-source`, cueRouting[cue].isMix ? "mix" : "own");
     check("mirror", mirroredCue());
-    check("show-digital", app.view.isDigitalShown);
-    check("show-loopback", app.view.isLoopbackShown);
-    check("theme", app.view.theme);
+    check("show-digital", snap().view.isDigitalShown);
+    check("show-loopback", snap().view.isLoopbackShown);
+    check("theme", currentTheme());
     refreshMixLink();
     markUncapturedRoutes();
     const brightness = dialog().querySelector<HTMLElement>("[data-slider='brightness']")!;
@@ -75,17 +76,16 @@ const settingIntents: Record<string, (input: HTMLInputElement | HTMLSelectElemen
 };
 
 const changeView = (view: "isDigitalShown" | "isLoopbackShown", isShown: boolean): void => {
-    app.view[view] = isShown;
-    saveView({ isDigitalShown: app.view.isDigitalShown, isLoopbackShown: app.view.isLoopbackShown });
-    layout();
+    const { isDigitalShown, isLoopbackShown } = snap().view;
+    const next = { isDigitalShown, isLoopbackShown };
+    next[view] = isShown;
+    saveView(next);
+    getEngine().setView(next);
 };
 
 const onChange = (input: HTMLInputElement | HTMLSelectElement): void => {
     const setting = input.dataset["setting"] ?? "";
-    if (setting === "theme" && isTheme(input.value)) {
-        app.view.theme = input.value;
-        return (applyTheme(input.value), saveTheme(input.value));
-    }
+    if (setting === "theme" && isTheme(input.value)) return (applyTheme(input.value), saveTheme(input.value));
     const view = viewSettings[setting];
     if (view) return changeView(view, (input as HTMLInputElement).checked);
     const intent = settingIntents[setting]?.(input);
@@ -93,7 +93,7 @@ const onChange = (input: HTMLInputElement | HTMLSelectElement): void => {
 };
 
 export const settingsActions: Record<string, () => void> = {
-    "open-settings": () => (dialog().showModal(), hooks.refresh()),
+    "open-settings": () => (dialog().showModal(), requestRender()),
 };
 
 export const wireSettingsDialog = (): void => {

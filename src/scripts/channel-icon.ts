@@ -1,8 +1,8 @@
 import { channelIcons, defaultIcon, iconOf, isChannelIcon } from "../lib/channel-icons.ts";
 import type { ChannelId } from "../lib/mixer.ts";
 import { isShownInTray } from "../lib/tray-rows.ts";
-import { app, hooks } from "./app-state.ts";
 import { desktopApp } from "./desktop.ts";
+import { getEngine, snap } from "./engine-client.ts";
 import { cloneIcon } from "./icons.ts";
 import { runPageIntent } from "./run-intent.ts";
 import { saveTrayHidden } from "./store.ts";
@@ -47,20 +47,20 @@ export const refreshChannelIcon = (ids: ChannelId[]): void => {
     const id = ids[0];
     if (!element || id === undefined) return;
     element.querySelector<HTMLElement>("[data-channel-tray-show]")!.hidden = desktopApp() === null;
-    showCurrentIcon(iconOf(app.state.icons, id));
-    for (const input of fields("show")) input.checked = isShownInTray(ids, app.view.trayHidden);
+    showCurrentIcon(iconOf(snap().state.icons, id));
+    for (const input of fields("show")) input.checked = isShownInTray(ids, snap().view.trayHidden);
     // Without a choice of its own, Default is ticked rather than the icon it falls back to.
-    const chosen = isChannelIcon(app.state.icons[id]) ? app.state.icons[id] : "";
+    const chosen = isChannelIcon(snap().state.icons[id]) ? snap().state.icons[id] : "";
     for (const input of fields("icon")) input.checked = input.value === chosen;
     const fallback = element.querySelector<HTMLElement>("[data-channel-icon-default]");
     if (fallback) fallback.title = `Default: ${channelIcons[defaultIcon(id)]}`;
 };
 
 const setShown = (ids: ChannelId[], isShown: boolean): void => {
-    const hidden = app.view.trayHidden.filter((id) => !(ids as string[]).includes(id));
-    app.view.trayHidden = isShown ? hidden : [...hidden, ...ids];
-    saveTrayHidden(app.view.trayHidden);
-    hooks.refresh();
+    const hidden = snap().view.trayHidden.filter((id) => !(ids as string[]).includes(id));
+    const trayHidden = isShown ? hidden : [...hidden, ...ids];
+    saveTrayHidden(trayHidden);
+    getEngine().setView({ trayHidden });
 };
 
 /** `openIds` reads the channels the dialog is open for. */

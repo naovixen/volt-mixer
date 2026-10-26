@@ -402,13 +402,13 @@ the page then stays read-only. That's the safety net: an incomplete spec can't s
 Because the code supports one model today, the first new model also needs these changes. Ask your
 agent to make them in small, separate commits:
 
-| File                             | Today                                           | Needs                                       |
-| -------------------------------- | ----------------------------------------------- | ------------------------------------------- |
-| `src/lib/spec.ts`                | imports `volt4-gen2.json` only                  | every data file, and a lookup by product ID |
-| `src/scripts/volt-connection.ts` | accepts only `protocol.productId`               | any product ID with a data file             |
-| `src/lib/mixer.ts`               | one fixed `channels` list (Input 1 … Loopback)  | the channel list per model                  |
-| `desktop/scripts/*.mjs`          | the app's Volts and udev rule: `productId` only | every supported product ID                  |
-| `README.md`                      | "Only the Volt 4 Gen 2 works for now"           | your model listed                           |
+| File                              | Today                                           | Needs                                       |
+| --------------------------------- | ----------------------------------------------- | ------------------------------------------- |
+| `src/lib/spec.ts`                 | imports `volt4-gen2.json` only                  | every data file, and a lookup by product ID |
+| `src/scripts/transport-webhid.ts` | accepts only `protocol.productId`               | any product ID with a data file             |
+| `src/lib/mixer.ts`                | one fixed `channels` list (Input 1 … Loopback)  | the channel list per model                  |
+| `desktop/scripts/*.mjs`           | the app's Volts and udev rule: `productId` only | every supported product ID                  |
+| `README.md`                       | "Only the Volt 4 Gen 2 works for now"           | your model listed                           |
 
 Keep the Volt 4 Gen 2 working exactly as before: its tests must still pass unchanged.
 

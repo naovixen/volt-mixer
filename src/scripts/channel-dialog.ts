@@ -4,13 +4,13 @@ import { channelById, cueNames } from "../lib/mixer.ts";
 import type { ChannelId, CueName } from "../lib/mixer.ts";
 import { stripGroups, type IStripGroup } from "../lib/strip-groups.ts";
 import { formatDb } from "../lib/taper.ts";
-import { app, hooks } from "./app-state.ts";
 import { closeIconList, refreshChannelIcon, wireChannelIcon } from "./channel-icon.ts";
 import { setText } from "./dom.ts";
+import { getEngine, snap } from "./engine-client.ts";
 import { togglePhantom } from "./phantom.ts";
+import { requestRender } from "./render-loop.ts";
 import { runPageIntent } from "./run-intent.ts";
 import { setSliderValue } from "./slider.ts";
-import { startAutoGain as startVoltAutoGain } from "./volt-session.ts";
 
 /* The channel settings dialog (ChannelDialog.astro), for whichever strip opened it. */
 
@@ -43,7 +43,7 @@ const showSections = (first: ChannelId, isStereo: boolean): void => {
 
 /** The strip that `id` is on now, as it's shown: one channel, or the linked pair it's part of. */
 const groupOf = (id: ChannelId): IStripGroup | undefined =>
-    stripGroups(app.state, app.view).find((group) => group.ids.includes(id));
+    stripGroups(snap().state, snap().view).find((group) => group.ids.includes(id));
 
 /** The title and the name box's placeholder say the strip's name (which a rename changes). */
 const showName = (name: string): void => {
@@ -55,11 +55,11 @@ const showName = (name: string): void => {
 export const openChannelDialog = (ids: readonly [ChannelId, ...ChannelId[]]): void => {
     openIds = [...ids];
     showName(groupOf(ids[0])?.name ?? "");
-    part<HTMLInputElement>("[data-channel-field='name']")!.value = app.state.names[ids[0]] ?? "";
+    part<HTMLInputElement>("[data-channel-field='name']")!.value = snap().state.names[ids[0]] ?? "";
     showSections(ids[0], ids.length > 1);
     closeIconList();
     dialog().showModal();
-    hooks.refresh();
+    requestRender();
 };
 
 /**
@@ -86,7 +86,7 @@ const setSlider = (name: string, value: number, isLive: boolean): void => {
 
 /** Pans and cue sends work even before this computer has the mix: runPageIntent says why they wait. */
 const refreshMix = (isLive: boolean): void => {
-    const [first, second] = openIds.map((id) => app.state.channels[id]);
+    const [first, second] = openIds.map((id) => snap().state.channels[id]);
     if (!first) return;
     setSlider("pan-0", Math.round(first.pan * 100), isLive);
     if (second) setSlider("pan-1", Math.round(second.pan * 100), isLive);
@@ -105,11 +105,11 @@ const refreshMix = (isLive: boolean): void => {
 
 const refreshPreamp = (isLive: boolean): void => {
     const preamp = preampIndexes()[0];
-    if (preamp !== undefined) setSlider("gain", app.state.preamp.gain[preamp] ?? 0, isLive);
-    const isPhantomOn = preamp !== undefined && app.state.preamp.phantom[preamp] === true;
+    if (preamp !== undefined) setSlider("gain", snap().state.preamp.gain[preamp] ?? 0, isLive);
+    const isPhantomOn = preamp !== undefined && snap().state.preamp.phantom[preamp] === true;
     part("[data-channel-action='phantom']")?.setAttribute("aria-pressed", String(isPhantomOn));
     const toneIndex = openIds[0] && channelById[openIds[0]].toneIndex;
-    const tone = toneIndex === undefined ? 0 : (app.state.tone[toneIndex] ?? 0);
+    const tone = toneIndex === undefined ? 0 : (snap().state.tone[toneIndex] ?? 0);
     for (const radio of dialog().querySelectorAll<HTMLInputElement>("input[name='tone']")) {
         radio.checked = Number(radio.value) === tone;
     }
@@ -157,7 +157,7 @@ const startAutoGain = (): void => {
     const status = part<HTMLElement>("[data-auto-gain-status]")!;
     const seconds = Number(part<HTMLSelectElement>("[data-channel-field='auto-gain-seconds']")?.value ?? 10);
     const mask = preampIndexes().reduce((bits, index) => bits | (1 << index), 0);
-    if (!startVoltAutoGain(mask, seconds)) return;
+    if (!getEngine().startAutoGain(mask, seconds)) return;
     let left = seconds;
     window.clearInterval(autoGainTimer);
     status.textContent = `Listening for ${left} seconds. Play your loudest part.`;

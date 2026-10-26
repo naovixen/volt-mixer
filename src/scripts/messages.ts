@@ -2,7 +2,7 @@ import { cloneIcon } from "./icons.ts";
 
 /*
  * Messages shown where they belong: under the field they're about (InlineMessage.astro) or in the
- * notice bar at the top of the page (notice() in app-state.ts). Each says what kind it is three
+ * notice bar at the top of the page (notice() in notices.ts). Each says what kind it is three
  * ways: an icon, its colour (src/styles/message.css) and, for screen readers, a word before it.
  */
 

@@ -1,7 +1,8 @@
+import type { ConditionCommand, ICondition } from "../lib/engine/core.ts";
 import { fillMessage, type MessageKind } from "./messages.ts";
 
 /*
- * The notice bar at the top of the page (Notice.astro). It holds the page's lasting conditions
+ * The notice bar at the top of the page (Notice.astro). It holds the engine's lasting conditions
  * (an unchecked firmware, another tab in use, another Volt Mixer with the mix), each until it no
  * longer holds, and below them the latest passing message. A passing message never replaces a
  * condition, so a condition's button (Use anyway) can't be lost. Each row can be dismissed; a
@@ -85,7 +86,7 @@ export const notice = (text: string, options: INoticeOptions = {}): void => {
  * Shows a lasting condition under `key` until it's set to null. Setting it again with the same
  * words leaves it as it is, and dismissed if it was.
  */
-export const setCondition = (key: string, text: string | null, options: INoticeOptions = {}): void => {
+const setCondition = (key: string, text: string | null, options: INoticeOptions = {}): void => {
     const next = text ? { text, ...options } : null;
     if (!next) dismissed.delete(key);
     if (next && dismissed.get(key) === signature(next)) return;
@@ -95,4 +96,14 @@ export const setCondition = (key: string, text: string | null, options: INoticeO
     if (next) shown.set(key, next);
     else shown.delete(key);
     render();
+};
+
+/** The engine's conditions, as they are now; `run` does what a condition's button asks. */
+export const showConditions = (conditions: ICondition[], run: (command: ConditionCommand) => void): void => {
+    const keys = new Set(conditions.map(({ key }) => key));
+    for (const key of [...shown.keys()]) if (key !== passingKey && !keys.has(key)) setCondition(key, null);
+    for (const { key, text, kind, action } of conditions) {
+        const button = action && { label: action.label, run: () => run(action.command) };
+        setCondition(key, text, { kind, ...(button ? { action: button } : {}) });
+    }
 };

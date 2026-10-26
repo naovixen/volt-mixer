@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, test } from "vitest";
 import * as commands from "./commands.ts";
 import { defaultState, type IMixerState } from "./mixer.ts";
-import { createMixerSync } from "./mixer-sync.ts";
+import { createMixerSync } from "./engine/sync.ts";
 import { parseCommandReport } from "./reports.ts";
 import type { DeviceReport } from "./reports.ts";
 import { specFor, type MuteField } from "./spec.ts";

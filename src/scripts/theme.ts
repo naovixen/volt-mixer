@@ -7,8 +7,14 @@ export type Theme = "system" | "light" | "dark";
 
 export const isTheme = (value: unknown): value is Theme => value === "system" || value === "light" || value === "dark";
 
+let shownTheme: Theme = "system";
+
+/** The theme the page shows now. */
+export const currentTheme = (): Theme => shownTheme;
+
 /** Sets the page's colour scheme, the browser bar colour and (in the desktop app) its windows. */
 export const applyTheme = (theme: Theme): void => {
+    shownTheme = theme;
     desktopApp()?.setTheme(theme);
     if (theme === "system") delete document.documentElement.dataset["theme"];
     else document.documentElement.dataset["theme"] = theme;

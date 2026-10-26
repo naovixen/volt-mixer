@@ -1,7 +1,7 @@
 import type { Intent } from "../lib/intents.ts";
 import { nextTone, type StripIds } from "../lib/strip-groups.ts";
-import { app } from "./app-state.ts";
 import { openChannelDialog } from "./channel-dialog.ts";
+import { snap } from "./engine-client.ts";
 import { togglePhantom } from "./phantom.ts";
 import { runPageIntent } from "./run-intent.ts";
 import { setSliderValue } from "./slider.ts";
@@ -13,7 +13,7 @@ const stripIntents: Record<string, (ids: StripIds) => Intent> = {
     mute: (ids) => ({ type: "mute", ids: [...ids] }),
     solo: (ids) => ({ type: "solo", ids: [...ids] }),
     link: (ids) => ({ type: "link", id: ids[0] }),
-    tone: (ids) => ({ type: "tone", ids: [...ids], tone: nextTone(app.state, ids) }),
+    tone: (ids) => ({ type: "tone", ids: [...ids], tone: nextTone(snap().state, ids) }),
 };
 
 const onStripAction = (button: HTMLElement): void => {
@@ -62,7 +62,7 @@ export const wireMixerControls = (): void => {
 
 /** Refreshes the outputs panel. */
 export const refreshOutputs = (isLive: boolean): void => {
-    const { monitor, headphone } = app.state;
+    const { monitor, headphone } = snap().state;
     const pressed = (action: string, isOn: boolean): void =>
         document.querySelector(`[data-action="${action}"]`)?.setAttribute("aria-pressed", String(isOn));
     pressed("monitor-mute", monitor.isMuted);

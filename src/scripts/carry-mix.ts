@@ -1,7 +1,8 @@
+import { notMixLink } from "../lib/engine/ownership.ts";
 import { parseMixLink } from "../lib/mix-links.ts";
 import { flashButton } from "./button-feedback.ts";
 import { showMessage } from "./messages.ts";
-import { notMixLink, type LinkReceiver } from "./mix-ownership.ts";
+import type { LinkReceiver } from "./mix-address.ts";
 import { drawQr } from "./qr.ts";
 import { loadCarriedLink, saveCarriedLink } from "./store.ts";
 

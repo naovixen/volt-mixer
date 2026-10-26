@@ -1,6 +1,8 @@
+import type { ITraySnapshot } from "../lib/engine/engine.ts";
 import { isRemoteIntent, type Intent, type IntentResult } from "../lib/intents.ts";
-import type { ITrayRow } from "../lib/tray-rows.ts";
 import { desktopApp } from "./desktop.ts";
+
+export type { ITraySnapshot };
 
 /*
  * The main window drives the Volt and answers the tray mixer wherever it's shown: the desktop
@@ -8,18 +10,6 @@ import { desktopApp } from "./desktop.ts";
  * phone server (desktop/src/phone.ts, via the preload). They draw what they're sent and ask for
  * changes as intents. Nothing is sent until a tray says hello or a phone connects.
  */
-
-export interface ITraySnapshot {
-    rows: ITrayRow[];
-    maxDb: number;
-    isLive: boolean;
-    isMixOwned: boolean;
-    status: string;
-    /** "on", "off" or "away", as the main window's status is coloured. */
-    statusKind: string;
-    /** The mix as a link to the website, while this computer has one: a phone can keep it to carry. */
-    mixLink: string | null;
-}
 
 /** A tray window names itself in hello and bye, so one closing doesn't silence another. */
 export type RemoteMessage =

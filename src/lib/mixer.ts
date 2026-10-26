@@ -141,7 +141,7 @@ export const linkGroup = (state: IMixerState, ids: readonly ChannelId[]): Channe
     ...new Set(ids.flatMap((id) => (isLinked(state, id) ? (pairOf(id) ?? [id]) : [id]))),
 ];
 
-/** Any solo silences every channel that isn't soloed, shown or not (src/scripts/hidden-solo.ts says so). */
+/** Any solo silences every channel that isn't soloed, shown or not (the engine says so: showHiddenSolos in src/lib/engine/engine.ts). */
 export const isSoloActive = (state: IMixerState): boolean => channelIds.some((id) => state.channels[id].isSoloed);
 
 /** Channel names are at most 24 UTF-16 units, like the name field's maxlength. */

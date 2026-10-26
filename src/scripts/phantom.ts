@@ -1,5 +1,5 @@
 import { channelById, type ChannelId } from "../lib/mixer.ts";
-import { app } from "./app-state.ts";
+import { snap } from "./engine-client.ts";
 import { runPageIntent } from "./run-intent.ts";
 
 /**
@@ -11,7 +11,7 @@ export const togglePhantom = (ids: readonly ChannelId[]): void => {
         .map((id) => channelById[id].preampIndex)
         .filter((index): index is number => index !== undefined);
     if (indexes.length === 0) return;
-    const isOn = indexes.every((index) => app.state.preamp.phantom[index]);
+    const isOn = indexes.every((index) => snap().state.preamp.phantom[index]);
     const question = "Turn on 48V phantom power? Only for condenser mics; it can damage ribbon mics.";
     if (!isOn && !window.confirm(question)) return;
     runPageIntent({ type: "phantom", ids: [...ids], to: !isOn });

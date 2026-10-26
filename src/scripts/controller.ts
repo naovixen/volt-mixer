@@ -1,45 +1,32 @@
-import { defaultState } from "../lib/mixer.ts";
-import { toSavedMix } from "../lib/saved-mix.ts";
+import type { IChanges } from "../lib/engine/changes.ts";
+import type { IEngineSnapshot, IVoltEngine } from "../lib/engine/engine.ts";
 import { stripGroups } from "../lib/strip-groups.ts";
-import { trayRows } from "../lib/tray-rows.ts";
 import { outputActions, refreshOutputs, wireMixerControls } from "./actions.ts";
-import { app, currentSpec, hooks, isLive, setStatus } from "./app-state.ts";
 import { carryMixLink, startCarryPanel } from "./carry-mix.ts";
 import { followLayout, refreshChannelDialog, wireChannelDialog } from "./channel-dialog.ts";
-import { connectionActions, wireConnectionView } from "./connection-view.ts";
-import { holdControlLock } from "./control-lock.ts";
-import { showHiddenSolos } from "./hidden-solo.ts";
+import { connectionActions, renderConnection } from "./connection-view.ts";
 import { initDialogs } from "./dialogs.ts";
 import { reportVoltLive, wireDisplayFade } from "./display-fade.ts";
-import { mixLink } from "./mix-link.ts";
+import { viewSpec } from "./engine-client.ts";
+import { driveVolt, startEngine } from "./host-web.ts";
+import { resetMeters, showMeterLevels } from "./meters-view.ts";
+import { readMixFromAddress, receiveMixLink, takeLinksFromOtherTabs, type LinkReceiver } from "./mix-address.ts";
 import { wireMixPasteForms } from "./mix-link-form.ts";
-import {
-    forgetMix,
-    pushMix,
-    readMixFromAddress,
-    receiveMixLink,
-    saveMixNow,
-    takeLinksFromOtherTabs,
-    takeOwnership,
-    takeSavedMix,
-    type LinkReceiver,
-} from "./mix-ownership.ts";
-import { wireMixPause } from "./mix-pause.ts";
-import { publish, wireRemote, type ITraySnapshot } from "./remote.ts";
-import { runIntent } from "./run-intent.ts";
+import { notice, showConditions } from "./notices.ts";
+import { isPageShown, onPageVisibility, wirePageVisibility } from "./page-visibility.ts";
+import { publish, wireRemote } from "./remote.ts";
+import { requestRender, setRenderer } from "./render-loop.ts";
+import { whenRefused } from "./run-intent.ts";
 import { refreshSettings, settingsActions, wireSettingsDialog } from "./settings-dialog.ts";
-import { resetMeters } from "./meters-view.ts";
-import { isPageShown, onPageShown, wirePageVisibility } from "./page-visibility.ts";
 import { initSliders } from "./slider.ts";
-import { clearRetiredSettings } from "./store.ts";
+import { clearRetiredSettings, loadTheme } from "./store.ts";
 import { refreshStrips, renderStrips } from "./strips.ts";
 import { applyTheme } from "./theme.ts";
-import * as volt from "./volt-connection.ts";
-import { identifyVolt, rereadVolt, sendSoon, wireSession } from "./volt-session.ts";
+import * as volt from "./transport-webhid.ts";
 
 /*
  * The mixer page: picks its mode (drive a Volt over WebHID, or carry a mix to a computer that can),
- * starts what that mode needs, and keeps the views in step with the state.
+ * starts what that mode needs, and draws what the engine says changed.
  */
 
 const element = <T extends HTMLElement>(selector: string): T => document.querySelector<T>(selector)!;
@@ -55,75 +42,48 @@ const keepFocus = (focused: Element | null): void => {
     (document.querySelector<HTMLElement>("dialog[open] .head button") ?? fallback).focus();
 };
 
-/** Set while the page is unseen and the strips need rebuilding; they're rebuilt when it's shown. */
-let isLayoutStale = false;
+/** The meters the connected Volt (or the newest recorded one) reports. */
+const meterNames = (snapshot: IEngineSnapshot): Set<string> =>
+    new Set(Object.keys(viewSpec(snapshot).reports.meters.offsets));
 
-/**
- * Brings the views up to date. The tray, phones and the desktop app are told every time; the page's
- * own views only while someone can see them (they catch up on being shown, onShown).
- */
-const refresh = (): void => {
-    publish();
-    reportVoltLive();
-    if (!isPageShown()) return;
+let engine: IVoltEngine | null = null;
+
+/** Draws what changed: the strips themselves only when the layout did, then every view's values. */
+const render = (changes: IChanges): void => {
+    if (!engine) return;
+    const snapshot = engine.snapshot();
+    if (changes.topics.has("layout")) {
+        renderStrips(stripGroups(snapshot.state, snapshot.view), meterNames(snapshot));
+        followLayout();
+    }
+    if (changes.topics.has("status")) renderConnection(snapshot);
+    if (changes.topics.has("conditions")) showConditions(snapshot.conditions, engine.runCondition);
     const focused = document.activeElement;
-    const live = isLive();
-    refreshStrips(app.state, app.view, live);
+    const live = snapshot.isLive;
+    refreshStrips(snapshot.state, snapshot.view, live);
     refreshOutputs(live);
     refreshChannelDialog(live);
     refreshSettings(live);
-    const isMixMissing = app.isHardwareKnown && !app.state.isMixOwned && app.mixHold === null;
-    element("[data-mix-setup]").hidden = !(volt.connectedSpec() && isMixMissing);
-    element<HTMLButtonElement>("[data-action='push-mix']").disabled = !live || !app.state.isMixOwned;
+    const isMixMissing = snapshot.isHardwareKnown && !snapshot.state.isMixOwned && snapshot.mixHold === null;
+    element("[data-mix-setup]").hidden = !(snapshot.connection && isMixMissing);
+    element<HTMLButtonElement>("[data-action='push-mix']").disabled = !live || !snapshot.state.isMixOwned;
     keepFocus(focused);
-    showHiddenSolos();
 };
-
-const meterNames = (): Set<string> => new Set(Object.keys(currentSpec().reports.meters.offsets));
-
-const relayout = (): void => {
-    isLayoutStale = !isPageShown();
-    if (!isLayoutStale) {
-        renderStrips(stripGroups(app.state, app.view), meterNames());
-        followLayout();
-    }
-    refresh();
-};
-
-/** Shown again: the views catch up, and the meters start from empty rather than old peaks. */
-const onShown = (): void => {
-    resetMeters();
-    if (isLayoutStale) relayout();
-    else refresh();
-};
-
-/** What a tray window or a phone shows: the rows the viewer chose, and whether it can change anything. */
-const traySnapshot = (isForPhone: boolean): ITraySnapshot => ({
-    rows: trayRows(app.state, app.view, app.view.trayHidden),
-    maxDb: currentSpec().faderMaxDb,
-    isLive: isLive(),
-    isMixOwned: app.state.isMixOwned,
-    status: element("[data-status]").textContent?.trim() ?? "",
-    statusKind: element("[data-status]").dataset["status"] ?? "off",
-    mixLink: isForPhone && app.state.isMixOwned ? mixLink() : null,
-});
 
 const confirmThen = (question: string, run: () => void): void => {
     if (window.confirm(question)) run();
 };
 
-const pageActions: Record<string, () => void> = {
+const pageActions = (current: IVoltEngine): Record<string, () => void> => ({
     ...connectionActions,
     ...outputActions,
     ...settingsActions,
-    identify: identifyVolt,
-    "mix-defaults": () =>
-        confirmThen("Set every channel to 0 dB, like a new UAD Console session?", () =>
-            takeOwnership(toSavedMix(defaultState())),
-        ),
-    "push-mix": () => confirmThen("Apply this computer's mix to the Volt?", pushMix),
-    "forget-mix": () => confirmThen("Forget this computer's mix? The Volt keeps playing what it has.", forgetMix),
-};
+    identify: current.identify,
+    "mix-defaults": () => confirmThen("Set every channel to 0 dB, like a new UAD Console session?", current.resetMix),
+    "push-mix": () => confirmThen("Apply this computer's mix to the Volt?", current.pushMix),
+    "forget-mix": () =>
+        confirmThen("Forget this computer's mix? The Volt keeps playing what it has.", current.forgetMix),
+});
 
 /** Mix links, from the address (also when it changes) or a paste box, go to `receive`. */
 const wireLinkIntake = (receive: LinkReceiver): void => {
@@ -131,23 +91,46 @@ const wireLinkIntake = (receive: LinkReceiver): void => {
     window.addEventListener("hashchange", () => readMixFromAddress(receive));
 };
 
+/** Shown again: the views catch up, and the meters start from empty rather than old peaks. */
+const onVisibility = (current: IVoltEngine, isShown: boolean): void => {
+    current.setMetersWanted(isShown);
+    if (!isShown) return;
+    resetMeters();
+    requestRender();
+};
+
+/** What the engine says goes to the views, the tray and phones, and the desktop app. */
+const follow = (current: IVoltEngine): void => {
+    current.onChange((changes) => {
+        requestRender(changes);
+        publish();
+        reportVoltLive(current.snapshot().isLive);
+    });
+    current.onMessage((text, kind) => notice(text, { kind }));
+    current.onMeters(showMeterLevels);
+    current.setMetersWanted(isPageShown());
+    onPageVisibility((isShown) => onVisibility(current, isShown));
+    whenRefused(() => requestRender());
+};
+
 /** The views every mode has; they show the state, read-only until a Volt can be changed. */
-const wireViews = (): void => {
-    Object.assign(hooks, { sendSoon, layout: relayout, refresh });
+const wireViews = (current: IVoltEngine): void => {
+    setRenderer(render);
     wirePageVisibility();
-    onPageShown(onShown);
+    follow(current);
     clearRetiredSettings();
-    applyTheme(app.view.theme);
+    applyTheme(loadTheme());
     initSliders(document);
     initDialogs();
     wireMixerControls();
     wireChannelDialog();
     wireSettingsDialog();
+    const actions = pageActions(current);
     document.addEventListener("click", (event) => {
         const action = (event.target as Element).closest<HTMLElement>("[data-action]")?.dataset["action"] ?? "";
-        pageActions[action]?.();
+        actions[action]?.();
     });
-    relayout();
+    requestRender();
 };
 
 /** A browser without WebHID (a phone, Firefox, Safari): it says why, and carries mix links. */
@@ -159,32 +142,27 @@ const startCarrying = (): void => {
 };
 
 /** The tray window and phones (desktop app only) send intents; only a page that can drive the Volt applies them. */
-const answerOthers = (): void =>
+const answerOthers = (current: IVoltEngine): void =>
     wireRemote({
-        isActive: () => app.hasControl,
-        snapshot: traySnapshot,
-        run: (intent) => (isLive() ? runIntent(intent) : "ignored"),
-        onViewOpened: rereadVolt,
+        isActive: () => current.snapshot().hasControl,
+        snapshot: current.traySnapshot,
+        run: (intent) => (current.snapshot().isLive ? current.runIntent(intent) : "ignored"),
+        onViewOpened: current.reread,
     });
 
 /** A browser with WebHID drives the Volt, once this tab has control. */
-const startDriving = (): void => {
-    wireMixPause(takeSavedMix);
+const startDriving = (current: IVoltEngine): void => {
     wireLinkIntake(receiveMixLink);
     takeLinksFromOtherTabs();
-    window.addEventListener("pagehide", saveMixNow);
-    // A link the page opened with is applied, kept, or sent to the tab in use: known once the lock is.
-    void holdControlLock().then(() => readMixFromAddress(receiveMixLink));
-    answerOthers();
+    answerOthers(current);
     wireDisplayFade();
-    wireConnectionView();
-    wireSession();
-    volt.watchDevices();
-    void volt.reconnect().then((isConnected) => isConnected || setStatus("Not connected", "off"));
+    // A link the page opened with is applied, kept, or sent to the tab in use: known once the lock is.
+    driveVolt(current, () => readMixFromAddress(receiveMixLink));
 };
 
 export const start = (): void => {
-    wireViews();
-    if (volt.isWebHidSupported()) startDriving();
+    engine = startEngine();
+    wireViews(engine);
+    if (volt.isWebHidSupported()) startDriving(engine);
     else startCarrying();
 };
