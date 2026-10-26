@@ -17,7 +17,7 @@ export interface IConnectionInfo {
     isIdentified: boolean;
 }
 
-/** "connected" (IConnectionInfo), "disconnected", "report" ({ reportId, data }), "error" and "sendfailed" ({ message }). */
+/** "connected" (IConnectionInfo), "disconnected", "report" ({ reportId, data }) and "error" ({ message }). */
 export const connectionEvents = new EventTarget();
 
 /** The connected Volt: set only once it has identified itself, so no report is handled before. */
@@ -55,15 +55,16 @@ const onInput = (event: HIDInputReportEvent): void => {
 
 /** Sends to `target` while it's the device being identified or the one connected. */
 const sendNow = async (target: HIDDevice, reports: IReport[], isCurrent: () => boolean): Promise<void> => {
-    for (const [i, report] of reports.entries()) {
+    for (const report of reports) {
         if (!isCurrent()) return;
         try {
             await target.sendReport(report.reportId, report.data as Uint8Array<ArrayBuffer>);
-        } catch (error) {
-            emit("sendfailed", {
-                message: `Couldn't send to the Volt (${(error as Error).message}).`,
-                unsent: reports.slice(i),
-            });
+        } catch {
+            // A failed write means the link is gone, typically a KVM switch or an unplug. The
+            // device drops quietly, the same as a disconnect event, rather than as an error: the
+            // page shows "on the other computer?" and reconnects when it's back. Anything still
+            // queued for it is abandoned.
+            if (device === target) drop();
             return;
         }
     }
@@ -160,7 +161,8 @@ const adopt = (candidate: HIDDevice): Promise<boolean> => {
 };
 
 const drop = (): void => {
-    device?.removeEventListener("inputreport", onInput);
+    if (!device) return;
+    device.removeEventListener("inputreport", onInput);
     device = null;
     currentSpec = null;
     emit("disconnected", { isByUser: isHeldOff });

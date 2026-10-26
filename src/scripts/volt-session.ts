@@ -10,7 +10,7 @@ import { isPageShown } from "./page-visibility.ts";
 import { saveMixSoon } from "./mix-ownership.ts";
 import { rememberBrightness, undimDisplay } from "./display-fade.ts";
 import { checkOtherProgram, noteOtherReading, takeMixWhenFree } from "./mix-pause.ts";
-import { notice, setCondition } from "./notices.ts";
+import { setCondition } from "./notices.ts";
 import * as volt from "./volt-connection.ts";
 
 /*
@@ -195,11 +195,6 @@ export const identifyVolt = (): void => {
 
 export const wireSession = (): void => {
     volt.connectionEvents.addEventListener("report", (event) => onReport((event as CustomEvent).detail));
-    volt.connectionEvents.addEventListener("sendfailed", (event) => {
-        notice((event as CustomEvent<{ message: string }>).detail.message, { kind: "error" });
-        app.sync.forget({ kind: "mix" });
-        requestStateSoon();
-    });
     window.setInterval(rereadVolt, rereadMs);
     // A page that was in the background may be well behind (browsers slow its timers), so it
     // catches up before anything can be moved from what it shows.
