@@ -1,4 +1,4 @@
-import type { IChanges } from "../lib/engine/changes.ts";
+import type { IChanges, Topic } from "../lib/engine/changes.ts";
 import type { IEngineSnapshot, IVoltEngine } from "../lib/engine/engine.ts";
 import { stripGroups } from "../lib/strip-groups.ts";
 import { outputActions, refreshOutputs, wireMixerControls } from "./actions.ts";
@@ -9,7 +9,7 @@ import { initDialogs } from "./dialogs.ts";
 import { reportVoltLive, wireDisplayFade } from "./display-fade.ts";
 import { viewSpec } from "./engine-client.ts";
 import { driveVolt, startEngine } from "./host-web.ts";
-import { resetMeters, showMeterLevels } from "./meters-view.ts";
+import { findMeters, resetMeters, showMeterLevels } from "./meters-view.ts";
 import { readMixFromAddress, receiveMixLink, takeLinksFromOtherTabs, type LinkReceiver } from "./mix-address.ts";
 import { wireMixPasteForms } from "./mix-link-form.ts";
 import { notice, showConditions } from "./notices.ts";
@@ -48,25 +48,42 @@ const meterNames = (snapshot: IEngineSnapshot): Set<string> =>
 
 let engine: IVoltEngine | null = null;
 
-/** Draws what changed: the strips themselves only when the layout did, then every view's values. */
+/** The strips, rebuilt when the layout changed; their values, for the channels that changed. */
+const renderMixer = (snapshot: IEngineSnapshot, changes: IChanges): void => {
+    const { topics } = changes;
+    if (!topics.has("layout") && changes.channels.size === 0 && !topics.has("inputs") && !topics.has("status")) return;
+    const groups = stripGroups(snapshot.state, snapshot.view);
+    if (topics.has("layout")) {
+        renderStrips(groups, meterNames(snapshot));
+        findMeters();
+        followLayout();
+    }
+    const names = new Map(groups.map((group) => [group.ids.join(","), group.name]));
+    refreshStrips(snapshot.state, names, snapshot.isLive, changes);
+};
+
+/** Whether any of `topics` changed. */
+const isAny = (changes: IChanges, ...topics: Topic[]): boolean => topics.some((topic) => changes.topics.has(topic));
+
+/** The mix setup panel and Apply mix: whether this computer has a mix, and can put it on the Volt. */
+const renderMixOwnership = (snapshot: IEngineSnapshot): void => {
+    const isMixMissing = snapshot.isHardwareKnown && !snapshot.state.isMixOwned && snapshot.mixHold === null;
+    element("[data-mix-setup]").hidden = !(snapshot.connection && isMixMissing);
+    element<HTMLButtonElement>("[data-action='push-mix']").disabled = !snapshot.isLive || !snapshot.state.isMixOwned;
+};
+
+/** Draws only what changed (a frame's worth of changes, render-loop.ts). */
 const render = (changes: IChanges): void => {
     if (!engine) return;
     const snapshot = engine.snapshot();
-    if (changes.topics.has("layout")) {
-        renderStrips(stripGroups(snapshot.state, snapshot.view), meterNames(snapshot));
-        followLayout();
-    }
-    if (changes.topics.has("status")) renderConnection(snapshot);
-    if (changes.topics.has("conditions")) showConditions(snapshot.conditions, engine.runCondition);
     const focused = document.activeElement;
-    const live = snapshot.isLive;
-    refreshStrips(snapshot.state, snapshot.view, live);
-    refreshOutputs(live);
-    refreshChannelDialog(live);
-    refreshSettings(live);
-    const isMixMissing = snapshot.isHardwareKnown && !snapshot.state.isMixOwned && snapshot.mixHold === null;
-    element("[data-mix-setup]").hidden = !(snapshot.connection && isMixMissing);
-    element<HTMLButtonElement>("[data-action='push-mix']").disabled = !live || !snapshot.state.isMixOwned;
+    renderMixer(snapshot, changes);
+    if (isAny(changes, "status")) renderConnection(snapshot);
+    if (isAny(changes, "conditions")) showConditions(snapshot.conditions, engine.runCondition);
+    if (isAny(changes, "outputs", "status")) refreshOutputs(snapshot.isLive);
+    if (isAny(changes, "channels", "inputs", "status", "layout", "view")) refreshChannelDialog(snapshot.isLive);
+    if (isAny(changes, "device", "routing", "status", "view", "channels")) refreshSettings(snapshot.isLive);
+    if (isAny(changes, "status", "layout")) renderMixOwnership(snapshot);
     keepFocus(focused);
 };
 
@@ -122,6 +139,8 @@ const wireViews = (current: IVoltEngine): void => {
     applyTheme(loadTheme());
     initSliders(document);
     initDialogs();
+    // A meter's length is measured once; a new window size measures it again.
+    window.addEventListener("resize", findMeters);
     wireMixerControls();
     wireChannelDialog();
     wireSettingsDialog();

@@ -42,8 +42,13 @@ const lastSent = { tray: "", phone: "" };
 const post = (message: RemoteMessage): void => channel?.postMessage(message);
 const isActive = (): boolean => responder !== null && responder.isActive();
 
-/** Sends the tray and any phones what they show now, if it changed; called after every refresh. */
-export const publish = (): void => {
+/** At most this often: a drag changes the state at the pointer's rate, and a view needs no more than this. */
+const publishMs = 33;
+let publishTimer: ReturnType<typeof setTimeout> | undefined;
+
+/** Sends the tray and any phones what they show now, if it changed. */
+const publishNow = (): void => {
+    publishTimer = undefined;
     if (!isActive()) return;
     const send = (target: keyof typeof lastSent, deliver: (snapshot: ITraySnapshot) => void): void => {
         const snapshot = responder!.snapshot(target === "phone");
@@ -56,6 +61,12 @@ export const publish = (): void => {
     if (phoneCount > 0) send("phone", (snapshot) => desktopApp()?.publishToPhones(snapshot));
 };
 
+/** Something changed: the tray and phones hear of it shortly, if any are open. */
+export const publish = (): void => {
+    if (openTrays.size === 0 && phoneCount === 0) return;
+    publishTimer ??= setTimeout(publishNow, publishMs);
+};
+
 /** Another window and a phone may only ask for the remote intents (levels and mutes). */
 const run = (intent: unknown): IntentResult =>
     isActive() && isRemoteIntent(intent) ? responder!.run(intent) : "ignored";
@@ -64,7 +75,7 @@ const run = (intent: unknown): IntentResult =>
 const onOpened = (target: keyof typeof lastSent): void => {
     lastSent[target] = "";
     responder?.onViewOpened();
-    publish();
+    publishNow();
 };
 
 const onMessage = ({ data }: MessageEvent): void => {

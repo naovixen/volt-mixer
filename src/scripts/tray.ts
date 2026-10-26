@@ -8,7 +8,7 @@ import { cloneIcon } from "./icons.ts";
 import { loadTheme } from "./store.ts";
 import { applyTheme } from "./theme.ts";
 import type { ITraySnapshot, RemoteMessage } from "./remote.ts";
-import { initSliders, setSliderValue, useSliderSpec } from "./slider.ts";
+import { initSliders, setSliderDisabled, setSliderValue, useSliderSpec } from "./slider.ts";
 import { openTrayLink, type LinkStatus } from "./tray-link.ts";
 
 /*
@@ -88,9 +88,10 @@ const updateRow = (item: HTMLElement, row: ITrayRow, snapshot: ITraySnapshot): v
     const movedAt = recentInputs.get(item.dataset["key"] ?? "");
     if (movedAt === undefined || performance.now() - movedAt > inputHoldMs) setSliderValue(slider, row.level);
     const isFaderLocked = row.kind === "channel" && !snapshot.isMixOwned;
-    slider.setAttribute("aria-disabled", String(!snapshot.isLive || isFaderLocked));
+    setSliderDisabled(slider, !snapshot.isLive || isFaderLocked);
     const mute = item.querySelector<HTMLButtonElement>("[data-row-action='mute']")!;
-    mute.setAttribute("aria-pressed", String(row.isMuted));
+    if (mute.getAttribute("aria-pressed") !== String(row.isMuted))
+        mute.setAttribute("aria-pressed", String(row.isMuted));
     mute.disabled = !snapshot.isLive;
 };
 

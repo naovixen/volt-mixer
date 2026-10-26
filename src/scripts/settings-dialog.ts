@@ -2,9 +2,8 @@ import { isRouteKnown } from "../lib/commands.ts";
 import type { Intent } from "../lib/intents.ts";
 import { cueNames, type CueName } from "../lib/mixer.ts";
 import { getEngine, snap, viewSpec } from "./engine-client.ts";
-import { requestRender } from "./render-loop.ts";
 import { runPageIntent } from "./run-intent.ts";
-import { setSliderValue } from "./slider.ts";
+import { setSliderDisabled, setSliderValue } from "./slider.ts";
 import { saveTheme, saveView } from "./store.ts";
 import { applyTheme, currentTheme, isTheme } from "./theme.ts";
 import { refreshMixLink, wireMixLink } from "./mix-link.ts";
@@ -39,8 +38,12 @@ const viewSettings: Record<string, "isDigitalShown" | "isLoopbackShown"> = {
     "show-loopback": "isLoopbackShown",
 };
 
-/** Updates the dialog's values from state; device settings need the Volt, the view doesn't. */
+/**
+ * Updates the dialog's values from state; device settings need the Volt, the view doesn't. Only
+ * while it's open: opening it draws everything (settingsActions).
+ */
 export const refreshSettings = (isLive: boolean): void => {
+    if (!dialog().open) return;
     const { device, cues: cueRouting, headphoneSource, isMixOwned } = snap().state;
     check("clip", device.isClipProtected);
     check("digital", device.digitalFormat);
@@ -54,7 +57,7 @@ export const refreshSettings = (isLive: boolean): void => {
     markUncapturedRoutes();
     const brightness = dialog().querySelector<HTMLElement>("[data-slider='brightness']")!;
     setSliderValue(brightness, device.brightness);
-    brightness.setAttribute("aria-disabled", String(!isLive));
+    setSliderDisabled(brightness, !isLive);
     for (const input of dialog().querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-setting]")) {
         const setting = input.dataset["setting"] ?? "";
         const isRouting = /source|mirror/.test(setting);
@@ -93,7 +96,7 @@ const onChange = (input: HTMLInputElement | HTMLSelectElement): void => {
 };
 
 export const settingsActions: Record<string, () => void> = {
-    "open-settings": () => (dialog().showModal(), requestRender()),
+    "open-settings": () => (dialog().showModal(), refreshSettings(snap().isLive)),
 };
 
 export const wireSettingsDialog = (): void => {

@@ -37,16 +37,25 @@ const stateOf = (control: HTMLElement): ISliderState => {
     return fresh;
 };
 
+/* An attribute written with the value it has still costs a style pass, and a screen reader update. */
+const setAttribute = (element: Element, name: string, value: string): void => {
+    if (element.getAttribute(name) !== value) element.setAttribute(name, value);
+};
+
 const render = (control: HTMLElement, state: ISliderState): void => {
     const { model, value } = state;
     control.parentElement?.style.setProperty("--slider-position", String(clamp01(model.toPosition(value))));
-    control.setAttribute("aria-valuenow", String(value));
-    control.setAttribute("aria-valuemin", String(model.min));
-    control.setAttribute("aria-valuemax", String(model.max));
-    control.setAttribute("aria-valuetext", model.speak(value));
+    setAttribute(control, "aria-valuemin", String(model.min));
+    setAttribute(control, "aria-valuemax", String(model.max));
+    setAttribute(control, "aria-valuenow", String(value));
+    setAttribute(control, "aria-valuetext", model.speak(value));
     const readout = control.parentElement?.querySelector("[data-slider-value]");
     if (readout && readout.textContent !== model.format(value)) readout.textContent = model.format(value);
 };
+
+/** Read-only while the Volt can't be changed: the attribute is written only when that changes. */
+export const setSliderDisabled = (control: HTMLElement, isDisabled: boolean): void =>
+    setAttribute(control, "aria-disabled", String(isDisabled));
 
 /** Shows a value that came from the page or the Volt; never announces it as a user change. */
 export const setSliderValue = (control: HTMLElement, value: number): void => {

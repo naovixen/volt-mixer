@@ -50,10 +50,15 @@ const { kind, labelledBy, describedBy, orientation = "horizontal", ticks = [], n
     /*
      * --slider-position (0–1) is set by src/scripts/slider.ts. The thumb travels the track minus
      * its own size, so 0 and 1 sit exactly at the ends and every slider of a kind lines up.
+     *
+     * The thumb and fill move by translate and scale, measured against the control (a size
+     * container, so 100cqi and 100cqb are its length): a drag then needs no layout, only a new
+     * frame, however fast the pointer moves.
      */
     .slider {
         --slider-position: 0;
         --slider-travel: calc(100% - var(--size-slider-thumb));
+        --slider-direction: 1;
 
         display: grid;
         gap: var(--space-between-lines);
@@ -67,6 +72,7 @@ const { kind, labelledBy, describedBy, orientation = "horizontal", ticks = [], n
      */
     .control {
         position: relative;
+        container-type: size;
         border-radius: var(--radius-small);
         cursor: grab;
     }
@@ -156,14 +162,15 @@ const { kind, labelledBy, describedBy, orientation = "horizontal", ticks = [], n
     }
 
     .slider:where([data-orientation="vertical"]) .fill {
-        inset-block: auto 0;
-        inset-inline: 0;
-        block-size: calc(var(--slider-position) * 100%);
+        inset: 0;
+        transform-origin: bottom;
+        scale: 1 var(--slider-position);
     }
 
     .slider:where([data-orientation="vertical"]) .thumb {
-        inset-block-end: calc(var(--slider-position) * var(--slider-travel));
+        inset-block-end: 0;
         inset-inline-start: 0;
+        translate: 0 calc(var(--slider-position) * (var(--size-slider-thumb) - 100cqb));
     }
 
     .slider:where([data-orientation="vertical"]) > .scale {
@@ -202,14 +209,24 @@ const { kind, labelledBy, describedBy, orientation = "horizontal", ticks = [], n
     }
 
     .slider:where([data-orientation="horizontal"]) .fill {
-        inset-block: 0;
-        inset-inline: 0 auto;
-        inline-size: calc(var(--slider-position) * 100%);
+        inset: 0;
+        transform-origin: left;
+        scale: var(--slider-position) 1;
     }
 
     .slider:where([data-orientation="horizontal"]) .thumb {
-        inset-inline-start: calc(var(--slider-position) * var(--slider-travel));
+        inset-inline-start: 0;
         inset-block-start: 0;
+        translate: calc(var(--slider-position) * (100cqi - var(--size-slider-thumb)) * var(--slider-direction)) 0;
+    }
+
+    /* Right to left, the fill grows from the right and the thumb travels left. */
+    .slider:where([data-orientation="horizontal"]:dir(rtl)) {
+        --slider-direction: -1;
+    }
+
+    .slider:where([data-orientation="horizontal"]:dir(rtl)) .fill {
+        transform-origin: right;
     }
 
     .slider:where([data-orientation="horizontal"]) > .scale {

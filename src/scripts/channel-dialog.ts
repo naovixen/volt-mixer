@@ -8,9 +8,8 @@ import { closeIconList, refreshChannelIcon, wireChannelIcon } from "./channel-ic
 import { setText } from "./dom.ts";
 import { getEngine, snap } from "./engine-client.ts";
 import { togglePhantom } from "./phantom.ts";
-import { requestRender } from "./render-loop.ts";
 import { runPageIntent } from "./run-intent.ts";
-import { setSliderValue } from "./slider.ts";
+import { setSliderDisabled, setSliderValue } from "./slider.ts";
 
 /* The channel settings dialog (ChannelDialog.astro), for whichever strip opened it. */
 
@@ -59,7 +58,7 @@ export const openChannelDialog = (ids: readonly [ChannelId, ...ChannelId[]]): vo
     showSections(ids[0], ids.length > 1);
     closeIconList();
     dialog().showModal();
-    requestRender();
+    refreshChannelDialog(snap().isLive);
 };
 
 /**
@@ -81,7 +80,7 @@ const setSlider = (name: string, value: number, isLive: boolean): void => {
     const control = part<HTMLElement>(`[data-slider='${name}']`);
     if (!control) return;
     setSliderValue(control, value);
-    control.setAttribute("aria-disabled", String(!isLive));
+    setSliderDisabled(control, !isLive);
 };
 
 /** Pans and cue sends work even before this computer has the mix: runPageIntent says why they wait. */

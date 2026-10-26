@@ -76,3 +76,11 @@ run, so the page's own work and the writes are the steadier columns.
 | ---------------------------------- | ------------------------------ | -------------------------------------------- | ------------------- | -------------------------------------- | -------------------------------------------------------- |
 | baseline                           | 51.0, 52.5                     | 300.3, 137.2, 275.5                          | 57.0                | 88.3, 254.2                            | 5, 117, 245                                              |
 | 1: engine, send pump, meter frames | 43.9, 39.3                     | 253.4, 130.2, 70.1                           | 32.3                | 49.1, 70.2                             | 5, 115, 236                                              |
+| 2: views draw only what changed    | 26.5, 33.0                     | 226.3, 118.5, 70.2                           | 30.7                | 50.4, 70.6                             | 5, 112, 234                                              |
+
+What's left in a drag is the browser drawing a frame for every screen refresh while the handle
+moves, which it should. A trace of a 3 s drag at 240 Hz shows only three style changes a frame
+(the slider's position, its readout's text and the meter covers), and a layout only for the
+readout's new text. The layout count stays high because text has to be laid out, but each pass is
+small (9 ms a second in all). The meter covers keep `will-change: transform`: without it, painting
+doubled (12 to 22 ms a second) and layerising didn't get cheaper.

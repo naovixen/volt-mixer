@@ -4,7 +4,7 @@ import { openChannelDialog } from "./channel-dialog.ts";
 import { snap } from "./engine-client.ts";
 import { togglePhantom } from "./phantom.ts";
 import { runPageIntent } from "./run-intent.ts";
-import { setSliderValue } from "./slider.ts";
+import { setSliderDisabled, setSliderValue } from "./slider.ts";
 import { stripIds } from "./strips.ts";
 
 /* What the strip and output controls ask for: the same intents as the tray and phones. */
@@ -60,25 +60,43 @@ export const wireMixerControls = (): void => {
     document.addEventListener("slider-input", onOutputLevel);
 };
 
+/** The outputs panel's buttons and sliders, found once. */
+let outputParts: { buttons: Map<string, HTMLButtonElement>; sliders: Map<string, HTMLElement> } | null = null;
+
+/** The elements `selectorFor` finds, by name; a name with none is left out. */
+const byName = <T extends Element>(names: string[], selectorFor: (name: string) => string): Map<string, T> => {
+    const found = new Map<string, T>();
+    for (const name of names) {
+        const element = document.querySelector<T>(selectorFor(name));
+        if (element) found.set(name, element);
+    }
+    return found;
+};
+
+const outputs = (): NonNullable<typeof outputParts> => {
+    outputParts ??= {
+        buttons: byName(Object.keys(outputIntents), (name) => `[data-action="${name}"]`),
+        sliders: byName(["monitor-level", "headphone-level"], (name) => `[data-slider="${name}"]`),
+    };
+    return outputParts;
+};
+
+const press = (button: Element | undefined, isOn: boolean): void => {
+    if (button && button.getAttribute("aria-pressed") !== String(isOn))
+        button.setAttribute("aria-pressed", String(isOn));
+};
+
 /** Refreshes the outputs panel. */
 export const refreshOutputs = (isLive: boolean): void => {
     const { monitor, headphone } = snap().state;
-    const pressed = (action: string, isOn: boolean): void =>
-        document.querySelector(`[data-action="${action}"]`)?.setAttribute("aria-pressed", String(isOn));
-    pressed("monitor-mute", monitor.isMuted);
-    pressed("monitor-mono", monitor.isMono);
-    pressed("headphone-mute", headphone.isMuted);
-    for (const [name, value] of [
-        ["monitor-level", monitor.level],
-        ["headphone-level", headphone.level],
-    ] as const) {
-        const control = document.querySelector<HTMLElement>(`[data-slider="${name}"]`);
-        if (!control) continue;
-        setSliderValue(control, value);
-        control.setAttribute("aria-disabled", String(!isLive));
+    const { buttons, sliders } = outputs();
+    press(buttons.get("monitor-mute"), monitor.isMuted);
+    press(buttons.get("monitor-mono"), monitor.isMono);
+    press(buttons.get("headphone-mute"), headphone.isMuted);
+    const levels: Record<string, number> = { "monitor-level": monitor.level, "headphone-level": headphone.level };
+    for (const [name, control] of sliders) {
+        setSliderValue(control, levels[name] ?? 0);
+        setSliderDisabled(control, !isLive);
     }
-    for (const action of Object.keys(outputIntents)) {
-        const button = document.querySelector<HTMLButtonElement>(`[data-action="${action}"]`);
-        if (button) button.disabled = !isLive;
-    }
+    for (const button of buttons.values()) button.disabled = !isLive;
 };
