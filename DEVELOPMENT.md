@@ -99,6 +99,11 @@ pnpm dist      # installers for this system, into desktop/release
 Close UAD Console and the installed Volt Mixer app while you test: two programs controlling one
 Volt disagree with each other.
 
+To measure CPU and memory, `tools/perf-bench.mjs` runs the built site and app against a fake Volt
+(it never reaches a real one) and prints a table. [docs/performance.md](docs/performance.md) has
+the method and the numbers to compare against. Run it before and after a change that could cost
+time: anything on the meter, drag or send path.
+
 ## Project layout
 
 ```
@@ -117,11 +122,11 @@ src/
                      message, text, tone and choice styles; guide*.css for the guide only
   icons/             SVG icons, with their licences
 public/              icon and web app manifest; guide/images, the guide's screenshots
-tools/               capture kit for a Windows PC with UAD Console (Node 24), and the guide's
-                     screenshot tool. Not deployed.
+tools/               capture kit for a Windows PC with UAD Console (Node 24), the guide's
+                     screenshot tool and the performance bench (perf-bench.mjs). Not deployed.
 desktop/             Electron app (own package.json)
 reference/decoded/   decoded captures the tests check against (serial numbers removed)
-docs/                protocol, maintenance guide, decisions
+docs/                protocol, maintenance guide, decisions, performance
 ```
 
 ## The user guide

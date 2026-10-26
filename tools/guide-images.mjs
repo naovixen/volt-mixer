@@ -14,26 +14,16 @@ import { qrCode } from "../src/lib/qr-svg.ts";
 import { newestSpec } from "../src/lib/spec.ts";
 import { dbToPosition, formatDb, formatPan } from "../src/lib/taper.ts";
 import { trayRows } from "../src/lib/tray-rows.ts";
-import { findBrowser } from "./lib/browser.mjs";
+import { findBrowser, quietBrowserArgs } from "./lib/browser.mjs";
+import { closeBrowser, connect, evaluate, findTarget } from "./lib/cdp.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.join(here, "..", "public", "guide", "images");
 const sizesFile = path.join(here, "..", "src", "data", "guide-images.json");
 const pageUrl = process.argv[2] ?? "http://localhost:4321/volt-mixer/";
 const port = 9339;
-const cdpTimeoutMs = 30000;
 
 const browser = findBrowser();
-const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** Rejects if `promise` takes longer than `ms`, so a browser that hangs can't stall the run. */
-const timeBox = (promise, what, ms = cdpTimeoutMs) => {
-    let timer;
-    const timeout = new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`${what} took longer than ${ms / 1000} s.`)), ms);
-    });
-    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
-};
 const { faderMaxDb } = newestSpec();
 const fader = (db) => ({ position: dbToPosition(db, faderMaxDb), text: formatDb(db) });
 const level = (value) => ({ position: value / 100, text: value.toFixed(1) });
@@ -163,82 +153,24 @@ const launch = async (profile) => {
         "--headless",
         "--disable-gpu",
         "--hide-scrollbars",
+        ...quietBrowserArgs,
         `--remote-debugging-port=${port}`,
         `--user-data-dir=${profile}`,
         "about:blank",
     ];
     const child = spawn(browser, args, { stdio: "ignore" });
-    for (let tries = 0; tries < 50 && child.exitCode === null; tries += 1) {
-        try {
-            const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-            const page = targets.find((target) => target.type === "page");
-            if (page) return { child, socketUrl: page.webSocketDebuggerUrl };
-        } catch {
-            /* Not listening yet. */
-        }
-        await wait(200);
+    try {
+        const page = await findTarget(
+            port,
+            (target) => target.type === "page" && target.url === "about:blank",
+            child,
+            50,
+        );
+        return { child, socketUrl: page.webSocketDebuggerUrl };
+    } catch (error) {
+        child.kill();
+        throw error;
     }
-    child.kill();
-    throw new Error("The browser didn't start.");
-};
-
-/* Answers a command's call, or resolves whoever waits for an event. */
-const onMessage =
-    (pending, waiters) =>
-    ({ data }) => {
-        const message = JSON.parse(data);
-        const call = pending.get(message.id);
-        pending.delete(message.id);
-        if (call) return message.error ? call.reject(new Error(message.error.message)) : call.resolve(message.result);
-        for (const waiter of [...waiters].filter((candidate) => candidate.method === message.method)) {
-            waiters.delete(waiter);
-            waiter.resolve();
-        }
-    };
-
-/* A minimal DevTools protocol client: send a command, or wait for an event. Both are time-boxed,
-   and both fail at once if the connection closes. */
-const createCdp = (socket) => {
-    const pending = new Map();
-    const waiters = new Set();
-    let lastId = 0;
-    const failAll = (error) => [...pending.values(), ...waiters].forEach((call) => call.reject(error));
-    socket.onclose = () => failAll(new Error("The browser closed the DevTools connection."));
-    socket.onerror = () => failAll(new Error("The DevTools connection failed."));
-    socket.onmessage = onMessage(pending, waiters);
-    const send = (method, params = {}) => {
-        lastId += 1;
-        const id = lastId;
-        const result = new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
-        socket.send(JSON.stringify({ id, method, params }));
-        return timeBox(result, method).finally(() => pending.delete(id));
-    };
-    const once = (method) => {
-        const waiter = { method };
-        const event = new Promise((resolve, reject) => Object.assign(waiter, { resolve, reject }));
-        waiters.add(waiter);
-        return timeBox(event, `Waiting for ${method}`).finally(() => waiters.delete(waiter));
-    };
-    return { send, once, close: () => socket.close() };
-};
-
-const connect = (socketUrl) => {
-    const socket = new WebSocket(socketUrl);
-    const opened = new Promise((resolve, reject) => {
-        socket.onopen = () => resolve(createCdp(socket));
-        socket.onerror = () => reject(new Error("Couldn't connect to the browser's DevTools."));
-    });
-    return timeBox(opened, "Connecting to the browser");
-};
-
-const evaluate = async (cdp, expression) => {
-    const { result, exceptionDetails } = await cdp.send("Runtime.evaluate", {
-        expression,
-        returnByValue: true,
-        awaitPromise: true,
-    });
-    if (exceptionDetails) throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text);
-    return result.value;
 };
 
 const stage = fs.readFileSync(path.join(here, "guide-stage.js"), "utf8");
@@ -277,13 +209,6 @@ const shootAll = async (cdp) => {
     // What src/components/guide/Shot.astro shows each one at.
     fs.writeFileSync(sizesFile, `${JSON.stringify(sizes, null, 4)}\n`);
     for (const [file, { width, height }] of Object.entries(sizes)) console.log(`${file} ${width}×${height}`);
-};
-
-const closeBrowser = async (child, profile) => {
-    const exited = new Promise((resolve) => (child.exitCode === null ? child.once("exit", resolve) : resolve()));
-    child.kill();
-    await timeBox(exited, "Closing the browser", 5000).catch(() => {});
-    fs.rmSync(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
 };
 
 const main = async () => {

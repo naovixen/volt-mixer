@@ -19,3 +19,17 @@ export const findBrowser = () => {
     }
     return browser;
 };
+
+/**
+ * For a throwaway profile: no sign-in, sync or extensions from the user's own browser (Edge signs a
+ * new profile in with the Windows account and installs its extensions, which open tabs), no
+ * first-run tab. Any of those would put another tab in front of the page a tool is working on.
+ */
+export const quietBrowserArgs = [
+    "--inprivate",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-extensions",
+    "--disable-sync",
+    "--disable-background-networking",
+];
