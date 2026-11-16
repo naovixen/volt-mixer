@@ -4,8 +4,8 @@ import type { IEngineView } from "../../src/lib/engine/core.ts";
 import type { IEngineStore } from "../../src/lib/engine/ports.ts";
 
 /*
- * What the app's engine keeps: this computer's mix and display brightness per Volt, a mix link
- * waiting for the Volt, and what the viewer chose to see. One JSON file in the user data folder,
+ * What the app's engine keeps: this computer's mix, display brightness and 48V per Volt, a mix
+ * link waiting for the Volt, and what the viewer chose to see. One JSON file in the user data folder,
  * written a moment after a change (a drag changes it many times a second) and at once on quitting,
  * sleeping or shutting down; through a temporary file, so a crash mid-write can't leave half of it.
  *
@@ -18,6 +18,8 @@ const writeDelayMs = 1000;
 interface IStoreData {
     mixes: Record<string, unknown>;
     brightness: Record<string, number>;
+    /** 48V masks (bit 0 = Input 1). */
+    phantom: Record<string, number>;
     pendingMix: unknown;
     view: { isDigitalShown: boolean; isLoopbackShown: boolean };
     trayHidden: string[];
@@ -45,7 +47,8 @@ const readView = (value: unknown): IStoreData["view"] => {
     return { isDigitalShown: view["isDigitalShown"] === true, isLoopbackShown: view["isLoopbackShown"] !== false };
 };
 
-const brightnessOf = (value: unknown): Record<string, number> =>
+/** The whole numbers 0–255 in a record (brightness levels, 48V masks), by Volt serial. */
+const bytesOf = (value: unknown): Record<string, number> =>
     Object.fromEntries(Object.entries(record(value)).filter((entry): entry is [string, number] => isRaw(entry[1])));
 
 /** The file's contents, checked; anything missing or wrong is left out. */
@@ -53,7 +56,8 @@ export const readStoreData = (value: unknown): IStoreData => {
     const data = record(value);
     return {
         mixes: record(data["mixes"]),
-        brightness: brightnessOf(data["brightness"]),
+        brightness: bytesOf(data["brightness"]),
+        phantom: bytesOf(data["phantom"]),
         pendingMix: data["pendingMix"] ?? null,
         view: readView(data["view"]),
         trayHidden: strings(data["trayHidden"]),
@@ -68,7 +72,7 @@ export const mergeLegacy = (data: IStoreData, legacy: ILegacyStore, isFresh: boo
         data.mixes[serial] = mix;
         isTaken = true;
     }
-    for (const [serial, raw] of Object.entries(brightnessOf(legacy.brightness))) {
+    for (const [serial, raw] of Object.entries(bytesOf(legacy.brightness))) {
         if (data.brightness[serial] === undefined) data.brightness[serial] = raw;
     }
     if (data.pendingMix === null && legacy.pendingMix) data.pendingMix = legacy.pendingMix;
@@ -130,6 +134,11 @@ export const createFileStore = (file: string): IFileStore => {
         loadBrightness: (serial) => data.brightness[serial] ?? null,
         saveBrightness: (serial, raw) => {
             data.brightness[serial] = raw;
+            changed();
+        },
+        loadPhantom: (serial) => data.phantom[serial] ?? null,
+        savePhantom: (serial, mask) => {
+            data.phantom[serial] = mask;
             changed();
         },
     };

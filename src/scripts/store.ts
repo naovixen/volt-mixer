@@ -10,6 +10,7 @@ import { isTheme, type Theme } from "./theme.ts";
 const prefix = "volt-mixer";
 const mixKey = (serial: string): string => `${prefix}.mix.${serial || "unknown"}`;
 const brightnessKey = (serial: string): string => `${prefix}.brightness.${serial || "unknown"}`;
+const phantomKey = (serial: string): string => `${prefix}.phantom.${serial || "unknown"}`;
 const pendingKey = `${prefix}.pending-mix`;
 const carriedKey = `${prefix}.carried-mix`;
 const viewKey = `${prefix}.view`;
@@ -91,6 +92,14 @@ export const loadBrightness = (serial: string): number | null => {
 
 export const saveBrightness = (serial: string, raw: number): void => write(brightnessKey(serial), raw);
 
+/** The 48V last seen on the Volt (bit 0 = Input 1), put back if the Volt comes back without it. */
+export const loadPhantom = (serial: string): number | null => {
+    const mask = read(phantomKey(serial));
+    return Number.isInteger(mask) && (mask as number) >= 0 && (mask as number) <= 255 ? (mask as number) : null;
+};
+
+export const savePhantom = (serial: string, mask: number): void => write(phantomKey(serial), mask);
+
 export const clearRetiredSettings = (): void => retiredKeys.forEach((key) => write(key, null));
 
 /** What the engine keeps, in this browser's storage. */
@@ -101,6 +110,8 @@ export const engineStore: IEngineStore = {
     savePendingMix,
     loadBrightness,
     saveBrightness,
+    loadPhantom,
+    savePhantom,
 };
 
 /** Every key under `prefix`, by what follows it (a Volt's serial). */

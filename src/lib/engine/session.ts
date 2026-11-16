@@ -16,6 +16,7 @@ import type { ICore } from "./core.ts";
 import type { IFade } from "./fade.ts";
 import type { IMeters } from "./meters.ts";
 import type { IOwnership } from "./ownership.ts";
+import type { IPhantomKeeper } from "./phantom-keeper.ts";
 import type { IConnectionInfo } from "./ports.ts";
 import { reportedSettings } from "./sync.ts";
 import type { IWriter } from "./writer.ts";
@@ -49,6 +50,7 @@ interface ISessionParts {
     writer: IWriter;
     ownership: IOwnership;
     fade: IFade;
+    phantom: IPhantomKeeper;
     meters: IMeters;
 }
 
@@ -70,7 +72,7 @@ const reportTopics: Partial<Record<DeviceReport["type"], [Topic[], readonly Chan
 const deviceText = (info: IConnectionInfo): string =>
     info.isIdentified ? `Connected · firmware ${info.version}` : "Connected · firmware unknown";
 
-export const createSession = (core: ICore, { writer, ownership, fade, meters }: ISessionParts): ISession => {
+export const createSession = (core: ICore, { writer, ownership, fade, phantom, meters }: ISessionParts): ISession => {
     /** When each reading this engine asked for, and hasn't had yet, was asked. */
     let asked: number[] = [];
     let stateTimer: ReturnType<typeof setTimeout> | undefined;
@@ -105,6 +107,7 @@ export const createSession = (core: ICore, { writer, ownership, fade, meters }: 
         changedAll();
         ownership.takeMixWhenFree();
         fade.undim();
+        phantom.restore();
     };
 
     const isEditing = (): boolean => performance.now() - core.flags.lastEditAt < editHoldMs;

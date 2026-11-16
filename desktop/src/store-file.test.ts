@@ -33,6 +33,18 @@ describe("Using the store, when the page hands over a brightness out of range", 
     });
 });
 
+describe("Using the store, when its file holds a Volt's 48V", () => {
+    test("then it should read it", () => {
+        expect(readStoreData({ phantom: { V1: 1 } }).phantom["V1"]).toBe(1);
+    });
+});
+
+describe("Using the store, when its file is from before 48V was kept", () => {
+    test("then it should hold no 48V", () => {
+        expect(readStoreData({ mixes: {} }).phantom).toEqual({});
+    });
+});
+
 describe("Using the store, when its file holds something that isn't a view", () => {
     test("then it should start from Console's view", () => {
         expect(readStoreData({ view: "loud" }).view).toEqual({ isDigitalShown: false, isLoopbackShown: true });

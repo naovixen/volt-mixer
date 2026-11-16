@@ -53,7 +53,14 @@ const waitUntil = async (isDone, ms, what) => {
 const makeProfile = (settings) => {
     const profile = fs.mkdtempSync(path.join(os.tmpdir(), "volt-bench-app-"));
     fs.writeFileSync(path.join(profile, "settings.json"), JSON.stringify(settings));
-    const store = { mixes: { [benchSerial]: seededMix() }, brightness: {}, pendingMix: null, view: {}, trayHidden: [] };
+    const store = {
+        mixes: { [benchSerial]: seededMix() },
+        brightness: {},
+        phantom: {},
+        pendingMix: null,
+        view: {},
+        trayHidden: [],
+    };
     fs.writeFileSync(path.join(profile, "volt-mixer.json"), JSON.stringify(store));
     return profile;
 };

@@ -22,7 +22,7 @@ export interface ITransport {
     send: (reports: IReport[]) => Promise<void>;
 }
 
-/** Where this computer's mix and display brightness are kept, per Volt serial. */
+/** Where this computer's mix, display brightness and 48V are kept, per Volt serial. */
 export interface IEngineStore {
     loadMix: (serial: string) => unknown;
     /** Saves the mix if it differs from what's saved; null forgets it. */
@@ -32,6 +32,9 @@ export interface IEngineStore {
     savePendingMix: (mix: unknown) => void;
     loadBrightness: (serial: string) => number | null;
     saveBrightness: (serial: string, raw: number) => void;
+    /** The 48V this computer last saw on the Volt, as its mask (bit 0 = Input 1); null when never seen. */
+    loadPhantom: (serial: string) => number | null;
+    savePhantom: (serial: string, mask: number) => void;
 }
 
 export interface IEngineOptions {

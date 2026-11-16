@@ -13,7 +13,8 @@ step on one computer was built in 0.2.0 and dropped in 0.2.1 (`docs/decisions.md
 Everything the Volt can report is read from it on every connect: mutes, 48V, preamp gain, tone,
 stereo links, Monitor and Headphone levels and mutes, Clip Protection, brightness, the digital input
 format. The front panel's changes also arrive live. So after a KVM switch the other computer shows
-what the Volt is really doing, and none of this needs syncing.
+what the Volt is really doing, and none of this needs syncing. (One exception: a computer turns
+48V back on if the Volt returns without it, `docs/decisions.md`.)
 
 ## What doesn't
 

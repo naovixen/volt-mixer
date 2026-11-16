@@ -41,6 +41,8 @@ export const memoryStore = (mix: unknown = null): IEngineStore & { saved: Map<st
         savePendingMix: (value) => void saved.set("pending", value),
         loadBrightness: (id) => (saved.get(`brightness:${id}`) as number | undefined) ?? null,
         saveBrightness: (id, raw) => void saved.set(`brightness:${id}`, raw),
+        loadPhantom: (id) => (saved.get(`phantom:${id}`) as number | undefined) ?? null,
+        savePhantom: (id, mask) => void saved.set(`phantom:${id}`, mask),
     };
 };
 
@@ -52,13 +54,19 @@ export interface ITestVolt {
     batches: () => number;
     /** A state reading the engine didn't ask for (another program asked), with this dump. */
     reply: (dump: Uint8Array) => void;
+    /** The Volt goes away and comes back, answering with `dump` (as after losing power). */
+    reconnect: (dump?: Uint8Array) => Promise<void>;
 }
+
+const info = { version: "1.0.3", serial, specVersion: "1.0.3", isExact: true, isIdentified: true };
 
 /** An engine connected to the pretend Volt; with `isWebsite`, it listens for another Volt Mixer first. */
 export const connectedEngine = async ({ mix = null as unknown, isWebsite = false } = {}): Promise<ITestVolt> => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "performance"] });
     const sent: string[] = [];
     let batches = 0;
+    /** What the Volt answers a state request with. */
+    let answer = stateDump();
     const reply = (dump: Uint8Array): void => engine.report(spec.reports.command.id, dump);
     const engine = createVoltEngine({
         transport: {
@@ -67,7 +75,7 @@ export const connectedEngine = async ({ mix = null as unknown, isWebsite = false
                 const hex = reports.map(toHex);
                 sent.push(...hex);
                 // The Volt answers its state request straight away, as the real one does.
-                if (hex.some((report) => report.startsWith("f011"))) queueMicrotask(() => reply(stateDump()));
+                if (hex.some((report) => report.startsWith("f011"))) queueMicrotask(() => reply(answer));
                 return Promise.resolve();
             },
         },
@@ -76,9 +84,15 @@ export const connectedEngine = async ({ mix = null as unknown, isWebsite = false
         view: { isDigitalShown: false, isLoopbackShown: true, trayHidden: [] },
     });
     engine.setControl(true);
-    engine.connected({ version: "1.0.3", serial, specVersion: "1.0.3", isExact: true, isIdentified: true }, spec);
+    engine.connected(info, spec);
     await vi.advanceTimersByTimeAsync(isWebsite ? 4000 : 100);
-    return { engine, sent, batches: () => batches, reply };
+    const reconnect = async (dump = stateDump()): Promise<void> => {
+        engine.disconnected(false);
+        answer = dump;
+        engine.connected(info, spec);
+        await vi.advanceTimersByTimeAsync(100);
+    };
+    return { engine, sent, batches: () => batches, reply, reconnect };
 };
 
 /** Crosspoint reports among `sent` (command byte 01), as hex. */

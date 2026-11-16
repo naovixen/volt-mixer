@@ -19,6 +19,7 @@ import {
 import { createFade } from "./fade.ts";
 import { createMeters, type IMeterFrame } from "./meters.ts";
 import { createOwnership, type ILinkOutcome } from "./ownership.ts";
+import { createPhantomKeeper } from "./phantom-keeper.ts";
 import type { IConnectionInfo, IEngineOptions, IEngineStore, ITransport } from "./ports.ts";
 import { createSession } from "./session.ts";
 import { createWriter } from "./writer.ts";
@@ -136,6 +137,7 @@ export const createVoltEngine = (parts: IEngineParts): IVoltEngine => {
         onChange: (changes) => {
             const { topics } = changes;
             if (topics.has("channels") || topics.has("layout") || topics.has("view")) showHiddenSolos(core);
+            if (topics.has("inputs")) phantom.remember();
             changeListeners.forEach((listen) => listen(changes));
         },
         onMessage: (text, kind) => messageListeners.forEach((listen) => listen(text, kind)),
@@ -143,9 +145,10 @@ export const createVoltEngine = (parts: IEngineParts): IVoltEngine => {
     const meters = createMeters(meterIntervalMs, (frame) => meterListeners.forEach((listen) => listen(frame)));
     let runIntent: (intent: Intent) => IntentResult = () => "ignored";
     const fade = createFade(core, (intent) => runIntent(intent));
+    const phantom = createPhantomKeeper(core, (intent) => runIntent(intent));
     const writer = createWriter(core, fade.rememberBrightness);
     const ownership = createOwnership(core, writer);
-    const session = createSession(core, { writer, ownership, fade, meters });
+    const session = createSession(core, { writer, ownership, fade, phantom, meters });
 
     runIntent = (intent) => {
         const result = applyIntent(core.state, intent, core.spec());

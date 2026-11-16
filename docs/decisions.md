@@ -21,9 +21,32 @@ The Volt reports everything except crosspoint gains (fader, pan and cue-send pos
 routing. Console doesn't read them either: it pushes its own saved mix every time it starts.
 Volt Mixer does the same: on connect it reads the state dump, then applies this computer's saved
 mix (per Volt serial: in localStorage on the website, in a file in the desktop app). Readable settings (mutes, 48V, gain, tone, links, levels) always
-come from the Volt. Each computer keeps its own copy; a `#mix=` link carries it to the other one.
+come from the Volt, except that 48V is put back when the Volt returns without it (below). Each computer keeps its own copy; a `#mix=` link carries it to the other one.
 Until a computer has a mix, no level is sent. `docs/remote-sync.md` looks at keeping that copy in
 step over the network, and at phone control.
+
+## 48V is put back when the Volt returns without it
+
+Reported 2026-11-16: 48V went off by itself, once in the middle of a call, with only the desktop
+app running. No path in the engine sends 48V unasked (it goes only when the state differs from
+what was last sent, and every reading and front-panel report updates both). Windows' Kernel-PnP
+device log showed the Volt alone dropping off USB about once a day in working hours, apart from
+the KVM's switches; one drop (10 Nov, 14:36) was at the time of the call. It draws up to 5.8 W and sat on the monitor's hub, so it most likely restarts
+when the port can't keep up; a Volt that restarts is taken to come back with 48V off (inferred
+from the report, not yet reproduced on the bench), and the engine reconnected quietly and showed
+what it read.
+
+UAD Console keeps 48V in its session and sends it when it starts. The engine does the same
+(`src/lib/engine/phantom-keeper.ts`): each computer keeps the 48V it last saw per Volt while it
+drove it, and on connecting turns back on what the Volt lacks, with a message. It only ever turns
+48V on, only on connecting, and only where the firmware is known. 48V that goes off while
+connected (the page, the front panel, another program) is remembered as off.
+
+The cost: 48V turned off while this computer wasn't connected (on the other computer, or with the
+app closed) comes back on here, without the question the 48V button asks. That is Console's
+behaviour too, and the guide says to turn 48V off while connected before swapping mics. If it
+proves wrong in use, the next step is a setting, not a prompt: in the tray there's no window to
+ask in.
 
 ## Click to set, on every slider
 
